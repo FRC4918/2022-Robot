@@ -1,0 +1,12 @@
+*.o
+*.swp
+*.save
+*.orig
+tags
+TAGS
+Makefile
+sftpbatchfile
+README.md
+.gitignore
+bin
+archive
