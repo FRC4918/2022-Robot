@@ -1,11 +1,28 @@
 /*
- * FRC Team 4918 2021 Competition Robot C/C++ code.
- * (C) Team 4918, the Roboctopi, original creation on 20feb2020.
+ * FRC Team 4918 2022 Competition Robot C/C++ code.
+ * (C) 2022 Team 4918, the Roboctopi, original creation on 20feb2020.
  * This code was derived from the MentorBot code.
  */
 
+#define SAFETY_LIMITS 1 /* Implement power/speed limits, for safety. This   */
+                        /* should be removed (not defined) for competition. */
+#define DISP_SMARTDASHBOARD 1  // add smartdashboard tuning displays
+
+// #define VISION_PROCESSING 1
+
+#ifdef SAFETY_LIMITS
+   const double yawRateMax      =   50.0;  // degrees/sec
+   const double yawRateAccelMax =  500.0;  // degrees/sec/sec
+   const double DriveMaxRPM     =  600.0;  // RPM (max for drivetrain motors)
+#else
+   const double yawRateMax      =  500.0;  // degrees/sec
+   const double yawRateAccelMax = 3000.0;  // degrees/sec/sec
+   const double DriveMaxRPM     = 5700.0;  // RPM (max for drivetrain motors)
+#endif
+
 // #include <frc/WPILib.h>  // uncomment to include everything
 #include "ctre/Phoenix.h"
+#include "rev/CANSparkMax.h"
 #include "frc/AnalogInput.h"
 #include "frc/BuiltInAccelerometer.h"
 #include "frc/PneumaticsModuleType.h"
@@ -14,6 +31,7 @@
 #include "frc/DigitalOutput.h"
 #include "frc/DigitalSource.h"
 #include "frc/DoubleSolenoid.h"
+#include "frc/DriverStation.h"
 #include "frc/Joystick.h"
 #include "frc/Servo.h"
 #include "frc/Solenoid.h"
@@ -22,6 +40,10 @@
 // #include "frc/RobotDrive.h"
 #include "frc/drive/DifferentialDrive.h"
 #include "frc/AddressableLED.h"
+#include <frc/ADIS16470_IMU.h>
+#ifdef DISP_SMARTDASHBOARD
+   #include <frc/smartdashboard/SmartDashboard.h>
+#endif
 #include "cameraserver/CameraServer.h"
 #include "vision/VisionRunner.h"
 #include <iostream>
@@ -34,6 +56,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/core.hpp>
+// #include "rev/ColorSensorV3.h"
 #include <unistd.h>
 #include <sstream>
 
@@ -44,36 +67,53 @@ using std::setfill;         // so we can use "setfill('0') in cout streams
 using std::abs;
 using namespace cv;
 
-#define JAG_LOOKING_FOR_RED 1
-// #define JAG_LOOKING_FOR_BLUE 1
-#ifndef JAG_LOOKING_FOR_RED
-  #define JAG_LOOKING_FOR_BLUE 1   // if not looking for red, look for blue
-#endif
-
 class Robot : public frc::TimedRobot {
  private:
+         // jag; 10feb2022 -- From example SparkMax code on this webpage:
+         // https://docs.revrobotics.com/sparkmax/software-resources/
+         //                                       spark-max-code-examples
+         // https://github.com/REVrobotics/SPARK-MAX-Examples/tree/master/
+         //                                C%2B%2B/Arcade%20Drive%20With%20CAN
+         // https://github.com/REVrobotics/SPARK-MAX-Examples/blob/master/
+         //         C%2B%2B/Arcade%20Drive%20With%20CAN/src/main/cpp/Robot.cpp
 
-         // Note for future: Need to add a gyro here.
-   WPI_TalonSRX m_motorLSMaster{      0 };   // Left  side drive motor
-   WPI_TalonSRX m_motorRSMaster{     15 };   // Right side drive motor   
-   WPI_VictorSPX m_motorLSSlave1{     1 };   // Left  side slave motor
-   WPI_VictorSPX m_motorLSSlave2{     2 };   // Left side slave motor
-   WPI_VictorSPX m_motorRSSlave1{    14 };   // Right side slave motor
-   WPI_VictorSPX m_motorRSSlave2{    13 };   // Right side slave motor
-   WPI_TalonSRX m_motorTopShooter{    3 };   // top motor on shooter
-   WPI_TalonSRX m_motorBotShooter{   12 };  // bottom motor on shooter
-   WPI_TalonSRX m_motorClimberPole{   4 };  // telescoping pole motor
-   WPI_VictorSPX m_motorConveyMaster{ 5 };  // conveyor motor 1
-   WPI_VictorSPX m_motorConveySlave{ 10 };  // conveyor motor 2
-   WPI_TalonSRX m_motorClimberWinch{ 11 };  // winch motor
-   WPI_VictorSPX m_motorIntake{       6 };  // intake motor
-   WPI_VictorSPX m_motorFlippyFlippy{ 9 }; //  motor to spin the color wheel 
-   frc::Compressor m_compressor{ 0, frc::PneumaticsModuleType::CTREPCM }; // CTRE compressor
+         // After checking with Olivia: the following CAN IDs are correct.
+         // (even the ones that are commented out).
+   static const int LSMasterDeviceID = 15;
+   static const int LSFollowDeviceID = 14;
+   static const int RSMasterDeviceID = 10;
+   static const int RSFollowDeviceID =  1;
+   rev::CANSparkMax m_motorLSMaster{ LSMasterDeviceID,
+                                     rev::CANSparkMax::MotorType::kBrushless};
+   rev::CANSparkMax m_motorLSFollow{ LSFollowDeviceID,
+                                     rev::CANSparkMax::MotorType::kBrushless};
+   rev::CANSparkMax m_motorRSMaster{ RSMasterDeviceID,
+                                     rev::CANSparkMax::MotorType::kBrushless};
+   rev::CANSparkMax m_motorRSFollow{ RSFollowDeviceID,
+                                     rev::CANSparkMax::MotorType::kBrushless};
 
-   frc::Solenoid m_shiftingSolenoid{ 0, frc::PneumaticsModuleType::CTREPCM, 7};
-   frc::DoubleSolenoid m_flipperSolenoid{ 0, frc::PneumaticsModuleType::CTREPCM, 0, 1};  // are these numbers correct?
+      // TEMPORARY: switch TopShooter to 2, and RightSideClimber to 3,
+      // because the number 3 Talon failed.  When we replace it, we can
+      // wire it up correctly again and change this back.
+// WPI_TalonSRX m_motorTopShooter{     3 };   // top motor on shooter
+   WPI_TalonSRX m_motorTopShooter{     2 };   // TEMP: top motor on shooter
+   WPI_TalonSRX m_motorBotShooter{    12 };   // bottom motor on shooter
+// WPI_TalonSRX m_motorRightSideClimberPole{  2 };  // telescoping pole motor
+   WPI_TalonSRX m_motorRightSideClimberPole{  3 };  // TEMP: telescoping pole motor
+   WPI_TalonSRX m_motorLeftSideClimberPole{  13 };  // telescoping pole motor
+   WPI_VictorSPX m_motorIntake{        4 };   // intake motor
+   WPI_VictorSPX m_motorConveyMaster{ 11 };   // conveyor motor
 
-   PigeonIMU    pigeonIMU{ 1 };
+                                                            // CTRE compressor
+// frc::Compressor m_compressor{ 0, frc::PneumaticsModuleType::CTREPCM };
+
+// frc::Solenoid m_shiftingSolenoid{ 0, frc::PneumaticsModuleType::CTREPCM, 7};
+// frc::DoubleSolenoid m_flipperSolenoid{ // are the following numbers correct?
+//                                0, frc::PneumaticsModuleType::CTREPCM, 0, 1};
+
+// PigeonIMU    pigeonIMU{ 1 };
+                                  // ADIS16470 plugged into the MXP (SPI) port
+   frc::ADIS16470_IMU gyro;
 
    frc::DigitalInput conveyorDIO0{0};
    frc::DigitalInput conveyorDIO1{1};
@@ -82,7 +122,6 @@ class Robot : public frc::TimedRobot {
    float drivePowerFactor = 0.8;
    frc::Joystick m_stick{0};
    frc::Joystick m_console{1};
-   // frc::DifferentialDrive m_drive{ m_motorLSMaster, m_motorRSMaster };
    //frc::PowerDistributionPanel pdp{0};
    frc::AnalogInput distSensor0{0};
    frc::AnalogInput distSensor1{1};
@@ -100,11 +139,12 @@ class Robot : public frc::TimedRobot {
       M_ROTATE         = 4,  // rotate (in place) left or right to desired yaw
       M_SHIFT_LOW      = 5,  // shift into low gear
       M_SHIFT_HIGH     = 6,  // shift into high gear
-      M_TERMINATE_SEQ  = 7 
+      M_SHOOT          = 7,  // shoot cargo into high goal
+      M_TERMINATE_SEQ  = 8 
    };
 
                  // create a struct which can contain a full maneuver
-		 // (type, distance, yaw (heading), etc.)
+                 // (type, distance, yaw (heading), etc.)
    struct maneuver {
       int                index;      // index of this element in an array of
                                      // maneuvers
@@ -131,12 +171,13 @@ class Robot : public frc::TimedRobot {
      // index command             (feet)    positive left)  powercell?
      // ----- ----------------     ----     --------        -----
       // index 0: (ballgrabber)
-      {   0,  M_DRIVE_STRAIGHT,     4.0,       0.0,         false },
+      {   0,  M_DRIVE_STRAIGHT,     0.5,       0.0,         false },
       {   1,  M_TURN_RIGHT,         0.0,     -26.0,         false },
-      {   2,  M_DRIVE_STRAIGHT,     7.5,     -30.0,         true  },
-      {   3,  M_TURN_LEFT,          0.0,      70.0,         false },
-      {   4,  M_DRIVE_STRAIGHT,     8.0,      75.0,         true  },
-      {   5,  M_ROTATE,             0.0,       0.0,         false },
+      {   2,  M_DRIVE_STRAIGHT,     0.5,     -30.0,         true  },
+      {   3,  M_TURN_LEFT,          0.0,      20.0,         false },
+      {   4,  M_ROTATE,             0.0,     -10.0,         false },
+                     // will put shoot maneuver here...
+      {   5,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {   6,  M_DRIVE_STRAIGHT,     1.0,       0.0,         false },
       {   7,  M_DRIVE_STRAIGHT,     9.0,       0.0,         true  },
       {   8,  M_STOP,               0.0,       0.0,         false },
@@ -285,17 +326,26 @@ class Robot : public frc::TimedRobot {
       double conY;
       bool   joyButton[12];
       bool   conButton[13];
-      int    iLSMasterPosition;
-      int    iRSMasterPosition;
+      double dLSMasterPosition;
+      double dRSMasterPosition;
       int    iTSMasterPosition; // Top Shooter
       int    iBSMasterPosition; // Bottom Shooter
-      int    iLSMasterVelocity;
-      int    iRSMasterVelocity;
+      double dLSMasterVelocity;
+      double dRSMasterVelocity;
       int    iTSMasterVelocity; // Top Shooter
       int    iBSMasterVelocity; // Bottom Shooter
       int    iIntakePercent;
       int    iConveyPercent;
-      double yawPitchRoll[3];  // data from Pigeon IMU
+      double yawPitchRoll[3];  // position data from Pigeon or ADIS16470 IMU
+      double rateXYZ[3];       // rate data from Pigeon IMU or ADIS16470 IMU;
+                               // index [2] (Z axis) is yaw rate in deg/sec.
+      double yawPosnEstimate;  // Current estimate of yaw position in degrees
+                               // (left-positive).  This is necessary because
+                               // the gyro only updates the yaw position once
+                               // every 0.1 second (5 20-millisecond ticks).
+      double yawRateEstimate;  // Current estimate of yaw turn rate in deg/sec
+                               // (left-positive).  Necessary because the gyro
+                               // only updates every 0.1 second (5 ticks).
       double initialYaw;
       bool   powercellInIntake;
       bool   powercellInPosition5;
@@ -303,12 +353,82 @@ class Robot : public frc::TimedRobot {
       bool   teleop;
    } sCurrState, sPrevState;
 
+      // Joystick button 1 (the "trigger" switch on the front of the joystick)
+      // tells the robot to align with a target (with the cargo ball if in
+      // forward drive mode; and with the limelight goal retro-reflective
+      // target if in reverse drive mode).
+#define BUTTON_TARGET               ( sCurrState.joyButton[1] )
+#define BUTTON_TARGET_PREV          ( sPrevState.joyButton[1] )
+      // Joystick button 2 (the bottom-center button on back of the joystick)
+      // reverses the drive direction (pushing the joystick forward drives
+      // toward the cargo intake when in normal mode, and toward the limelight
+      // when in reverse mode).
+#define BUTTON_REVERSE              ( sCurrState.joyButton[2] )
+#define BUTTON_REVERSE_PREV         ( sPrevState.joyButton[2] )
+      // joystick button 3 (the topmost center button on back of joystick)
+#define BUTTON_JOYTHREE             ( sCurrState.joyButton[3] )
+#define BUTTON_JOYTHREE_PREV        ( sPrevState.joyButton[3] )
+      // joystick button 4 (the leftmost button on back of joystick)
+#define BUTTON_JOYFOUR              ( sCurrState.joyButton[4] )
+#define BUTTON_JOYFOUR_PREV         ( sPrevState.joyButton[4] )
+      // joystick button 5 (the rightmost button on back of joystick)
+#define BUTTON_JOYFIVE              ( sCurrState.joyButton[5] )
+#define BUTTON_JOYFIVE_PREV         ( sPrevState.joyButton[5] )
+
+      // Console button  1 (the left-top pushbutton switch on the console)
+      // runs the climber up.
+#define BUTTON_CLIMBERUP            ( sCurrState.conButton[1] )
+#define BUTTON_CLIMBERUP_PREV       ( sPrevState.conButton[1] )
+      // Console button  2 (the center-top pushbutton switch on the console)
+      // runs the conveyor forward, when in manual conveyor mode (switch 11).
+#define BUTTON_CONVEYORFORWARD      ( sCurrState.conButton[2] )
+#define BUTTON_CONVEYORFORWARD_PREV ( sPrevState.conButton[2] )
+      // Console button  3 (the right-top pushbutton switch on the console)
+      // runs the climber down.
+#define BUTTON_CLIMBERDOWN          ( sCurrState.conButton[3] )
+#define BUTTON_CLIMBERDOWN_PREV     ( sPrevState.conButton[3] )
+      // Console button  4 (the centermost pushbutton switch on the console)
+      // runs the conveyor backward, when in manual conveyor mode (switch 11).
+#define BUTTON_CONVEYORBACKWARD      ( sCurrState.conButton[4] )
+#define BUTTON_CONVEYORBACKWARD_PREV ( sPrevState.conButton[4] )
+      // Console button  5 (rightmost center pushbutton switch on the console)
+      // switches USB cameras, in case they were initialized in a different
+      // order than usual.
+#define BUTTON_SWITCHCAMERA         ( sCurrState.conButton[5] )
+#define BUTTON_SWITCHCAMERA_PREV    ( sPrevState.conButton[5] )
+      // Console button  6 (leftmost bottom pushbutton switch on the console)
+      // flips up the color wheel
+#define BUTTON_EXTENDCOLORWHEEL      ( sCurrState.conButton[6] )
+#define BUTTON_EXTENDCOLORWHEEL_PREV ( sPrevState.conButton[6] )
+      // Console button  7 (center bottom pushbutton switch on the console)
+      // runs the color wheel
+#define BUTTON_RUNCOLORWHEEL        ( sCurrState.conButton[7] )
+#define BUTTON_RUNCOLORWHEEL_PREV   ( sPrevState.conButton[7] )
+      // Console button  8 (rightmost bottom pushbutton switch on the console)
+      // turns on the intake motor
+#define BUTTON_RUNINTAKE            ( sCurrState.conButton[8] )
+#define BUTTON_RUNINTAKE_PREV       ( sPrevState.conButton[8] )
+      // Console button  9 (the second-from-left of 4 missile switches)
+      // turns on manual conveyor mode.
+#define BUTTON_RUNCLIMBWINCH        ( sCurrState.conButton[ 9] )
+#define BUTTON_RUNCLIMBWINCH_PREV   ( sPrevState.conButton[ 9] )
+      // Console button 11 (the rightmost missile switch)
+      // turns on manual conveyor mode.
+#define BUTTON_MANUALCONVEYOR       ( sCurrState.conButton[11] )
+#define BUTTON_MANUALCONVEYOR_PREV  ( sPrevState.conButton[11] )
+      // Console button 12 (the leftmost missile switch)
+      // turns on cartesian (field-oriented) drive.
+#define BUTTON_CARTESIANDRIVE       ( sCurrState.conButton[12] )
+#define BUTTON_CARTESIANDRIVE_PREV  ( sPrevState.conButton[12] )
+
    struct sMotorState {
       double targetVelocity_UnitsPer100ms;
+      double targetVelocityRPM;
       double sensorVmax, sensorVmin;
    };
 
-   struct sMotorState LSMotorState, RSMotorState, TSMotorState, BSMotorState;
+   struct sMotorState LSMotorState, RSMotorState;
+   struct sMotorState TSMotorState, BSMotorState;
 
    bool aBooleanVariable = false;    // just an example of a boolean variable
    int    iCallCount = 0;
@@ -319,13 +439,59 @@ class Robot : public frc::TimedRobot {
    static constexpr int kLEDStripLength = 60;
    // PWM port 9
    // This must be a PWM header, not MXP or DIO
-   frc::AddressableLED m_led{9};
+   frc::AddressableLED m_led{0};
    std::array<frc::AddressableLED::LEDData, kLEDStripLength>
-	   m_ledBuffer;  // Reuse the buffer
+           m_ledBuffer;  // Reuse the buffer
    // Store what the last hue of the first pixel is:
    int firstLEDStripPixelHue = 0;
 
+      // NOTE: Because of reports of the Roborio locking up sometimes when I2C
+      //       is used, we have decided not to use the I2C color sensor.
+      // From example code at
+      // https://github.com/REVrobotics/Color-Sensor-v3-Examples/blob/master/
+      //                    C%2B%2B/Read%20RGB%20Values/src/main/cpp/Robot.cpp
+                              // I2C port for the Rev Robotics V3 color sensor
+  // static constexpr auto i2cPort = frc::I2C::Port::kOnboard;
+
+  /**
+   * A Rev Color Sensor V3 object is constructed with an I2C port as a 
+   * parameter. The device will be automatically initialized with default 
+   * parameters.
+   */
+  // rev::ColorSensorV3 m_colorSensor{i2cPort};
+
+   rev::SparkMaxPIDController m_LSMasterPID =
+                                           m_motorLSMaster.GetPIDController();
+   rev::SparkMaxPIDController m_RSMasterPID =
+                                          m_motorRSMaster.GetPIDController();
+   rev::SparkMaxRelativeEncoder m_LSMasterEncoder =
+                                           m_motorLSMaster.GetEncoder();
+   rev::SparkMaxRelativeEncoder m_RSMasterEncoder =
+                                          m_motorRSMaster.GetEncoder();
+   rev::SparkMaxLimitSwitch m_LSMasterForwardLimitSwitch =
+                   m_motorLSMaster.GetForwardLimitSwitch(
+                            rev::SparkMaxLimitSwitch::Type::kNormallyClosed );
+   rev::SparkMaxLimitSwitch m_RSMasterForwardLimitSwitch =
+                   m_motorRSMaster.GetForwardLimitSwitch(
+                            rev::SparkMaxLimitSwitch::Type::kNormallyClosed );
+   rev::SparkMaxLimitSwitch m_LSMasterReverseLimitSwitch =
+                   m_motorLSMaster.GetReverseLimitSwitch(
+                            rev::SparkMaxLimitSwitch::Type::kNormallyClosed );
+   rev::SparkMaxLimitSwitch m_RSMasterReverseLimitSwitch =
+                   m_motorRSMaster.GetReverseLimitSwitch(
+                            rev::SparkMaxLimitSwitch::Type::kNormallyClosed );
+   double DrivePIDkP = 0.0000;    // REV example had: 6e-5;
+   double DrivePIDkI = 0.0;       // REV example had: 1e-6;
+   double DrivePIDkD = 0.0;
+   double DrivePIDkIz = 0.0;
+   double DrivePIDkFF = 0.0017;  // REV example had: 0.000015;
+   double DrivePIDkMaxOutput =  1.0;
+   double DrivePIDkMinOutput = -1.0;
+
  public:
+
+   // static bool WeAreOnRedAlliance = true;
+   static bool WeAreOnRedAlliance;
 
    static struct sPowercellOnVideo {
       bool SeenByCamera;
@@ -344,6 +510,7 @@ class Robot : public frc::TimedRobot {
                  /*                      s: skew or rotation, deg (-90-0).  */
    double limex, limey, limea, limev, limes;
 
+#ifdef VISION_PROCESSING
       /*---------------------------------------------------------------------*/
       /* VisionThread()                                                      */
       /* This function executes as a separate thread, to take 640x480-pixel  */
@@ -359,22 +526,25 @@ class Robot : public frc::TimedRobot {
       // units::time::second_t dTimeOfLastCall = (units::second_t) 0;
       static bool   prevSwitchToColorWheelCam = false;
 
-      int iBiggestCircleIndex = -1;
-      int iBiggestCircleRadius = -1;
+      int minCircleRadius = 24;       // these are the limits of radius that
+      int maxCircleRadius = 60;       // we look for
+
+      int iBiggestCircleIndex = -1;   // And these are the largest radiuses
+      int iBiggestCircleRadius = -1;  // that we've found
 
       bool bDiagnosticMode = false;
 
-                           // jag; 08jan2022: use of GetInstance is deprecated;
-			   // eliminate the commented-out lines once the direct
-			   // static syntax is proved to work.
-//    cs::UsbCamera camera =
-//                 frc::CameraServer::GetInstance()->StartAutomaticCapture(1);
+      if ( frc::DriverStation::kRed == frc::DriverStation::GetAlliance() ) {
+         WeAreOnRedAlliance = true;    // we are on red alliance
+      } else {
+         WeAreOnRedAlliance = false;   // we are on blue alliance
+      }
+                  // "camera" is the camera connected to the outboard USB port
       cs::UsbCamera camera = frc::CameraServer::StartAutomaticCapture(1);
          //camera.SetResolution( 640, 480 );   // too detailed and slow
          //camera.SetResolution( 160, 120 );   // too coarse
       camera.SetResolution( 320, 240 );        // just right
-//    cs::UsbCamera camera2 =
-//                frc::CameraServer::GetInstance()->StartAutomaticCapture(0);
+                  // "camera2" is the camera connected to the inboard USB port
       cs::UsbCamera camera2 = frc::CameraServer::StartAutomaticCapture(0);
       camera2.SetResolution( 320, 240 );
 
@@ -385,24 +555,19 @@ class Robot : public frc::TimedRobot {
       powercellOnVideo.SwitchToColorWheelCam = false;
       powercellOnVideo.TestMode = false;
 
-//    cs::CvSink cvSink = frc::CameraServer::GetInstance()->GetVideo();
       cs::CvSink cvSink = frc::CameraServer::GetVideo();
       cs::CvSource outputStreamStd =
-//            frc::CameraServer::GetInstance()->PutVideo( "Gray", 320, 240 );
-              frc::CameraServer::PutVideo( "Gray", 320, 240 );
-              //frc::CameraServer::GetInstance()->GetVideo();
+              frc::CameraServer::PutVideo( "Processed", 320, 240 );
       cv::Mat source;
       cv::Mat output;
       cv::Mat hsvImg;
       cv::Mat threshImg;
       cv::Mat *pOutput;
-#ifdef JAG_LOOKING_FOR_RED
       cv::Mat lower_red_hue_range;
       cv::Mat upper_red_hue_range;
-#endif
 
       std::vector<Vec3f> v3fCircles;      // 3-element vector of floats;
-                                          // this will be the pass-by reference
+                                          // this will be the pass-by-reference
                                           // output of HoughCircles()
          /* HUE for YELLOW is 21-30.                                         */
          /* Adjust Hue depending on the lighting condition                   */
@@ -420,25 +585,21 @@ class Robot : public frc::TimedRobot {
           // depending on which alliance we are on for each match.
           // And don't forget to check under different lighting conditions!
 
-#ifdef JAG_LOOKING_FOR_RED
-      int     lowH = 200;      // Set Hue range for red (range is 0-255)
-      int     highH = 40;      //   (these values select 200-255 OR 0-40)
-#elif JAG_LOOKING_FOR_YELLOW
-      int     lowH = 30;       // Set Hue for yellow
-      int     highH = 65;      //
-#elif JAG_LOOKING_FOR_BLUE
-      int     lowH = 120;      // Set Hue range for blue
-      int     highH = 180;     //
-#else   // else assume we are looking for blue
-      int     lowH = 120;      // Set Hue range for blue
-      int     highH = 180;     //
-#endif
+      int     lowHRed   = 170;   // Set Hue range for red (full range is 0-180)
+      int     highHRed  =  40;   //   (these values select 200-255 OR 0-40)
+                                 // Yellow would be: 30-65
+      int     lowHBlue  =  80;   // Set Hue range for blue (full range is 0-255)
+      int     highHBlue = 120;
 
-      int     lowS = 110;       // Set Saturation (prev: 0)
-      int     highS = 255;
+      int     lowSRed   = 160;   // Set Saturation (prev: 0)
+      int     highSRed  = 255;
+      int     lowSBlue  = 100;   // Set Saturation (prev: 0)
+      int     highSBlue = 256;
 
-      int     lowV = 0;         // Set Value (orig: 102)
-      int     highV = 255;      // (orig: 225)
+      int     lowVRed   = 160;   // Set Value (orig: 102)
+      int     highVRed  = 255;   // (orig: 225)
+      int     lowVBlue  = 160;   // Set Value (orig: 102)
+      int     highVBlue = 255;   // (orig: 225)
 
       cvSink.SetSource( camera );
       while( true ) {
@@ -449,10 +610,18 @@ class Robot : public frc::TimedRobot {
               !prevSwitchToColorWheelCam ) {
             cvSink.SetSource( camera2 );       // switch to color wheel camera
             prevSwitchToColorWheelCam = powercellOnVideo.SwitchToColorWheelCam;
+                                   // This camera has a wide field of view, so
+                                   // the circles will be small
+            minCircleRadius = 10;  // was 20         // minimum circle radius
+            maxCircleRadius = 40;  // was 56         // maximum circle radius
          } else if ( !powercellOnVideo.SwitchToColorWheelCam &&
                      prevSwitchToColorWheelCam ) {
             cvSink.SetSource( camera );     // switch back to powercell camera
             prevSwitchToColorWheelCam = powercellOnVideo.SwitchToColorWheelCam;
+                                  // This camera has a narrow field of view, so
+                                  // the circles will be larger
+            minCircleRadius = 16;  // was 20         // minimum circle radius
+            maxCircleRadius = 46;  // was 56         // maximum circle radius
             bDiagnosticMode = !bDiagnosticMode;       // toggle diagnostic mode
             cout << "mel says diagnostic mode was changed" <<endl;
             cout << bDiagnosticMode <<endl; 
@@ -463,9 +632,11 @@ class Robot : public frc::TimedRobot {
             pOutput = &threshImg;   // diagnostic image (shows where yellow is,
                                     //                         or red or blue))
          } else if ( powercellOnVideo.SwitchToColorWheelCam ) {
+            // pOutput = &output;         // gray-scale image, for low latency
             pOutput = &source;          // full-color, direct from videocamera
          } else {
-            pOutput = &output;            // gray-scale image, for low latency
+            // pOutput = &output;         // gray-scale image, for low latency
+            pOutput = &source;          // full-color, direct from videocamera
          }
 
          usleep( 1000 );                               // wait one millisecond
@@ -473,25 +644,29 @@ class Robot : public frc::TimedRobot {
          {
             // dTimeOfLastCall = frc::GetTime();
             iFrameCount++;
-            cvtColor( source, output, cv::COLOR_BGR2GRAY );
+            // cvtColor( source, output, cv::COLOR_BGR2GRAY );
             cvtColor( source, hsvImg, cv::COLOR_BGR2HSV );
-#ifdef JAG_LOOKING_FOR_RED
-	    // jag; code adapted from:
-	    //  https://cppsecrets.com/users/
-	    //  18989711511997116104103495564103495564103109971051084699111109/
-	    //  C00-OpenCV-cvinRange.php
-	    //  Threshold the HSV image; keep only the red pixels
-            cv::inRange( hsvImg, cv::Scalar(0, lowS, lowV),
-                         cv::Scalar(highH, highS, highV), lower_red_hue_range );
-            cv::inRange( hsvImg, cv::Scalar( lowH, lowS, lowV),
-                         cv::Scalar(255, highS, highV), upper_red_hue_range );
-	    // Combine the above two images
-	    cv::addWeighted( lower_red_hue_range, 1.0,
-			     upper_red_hue_range, 1.0, 0.0, threshImg );
-#else
-            cv::inRange( hsvImg, cv::Scalar(lowH, lowS, lowV),
-                         cv::Scalar(highH, highS, highV), threshImg );
-#endif
+            if ( WeAreOnRedAlliance ) {
+               // jag; code adapted from:
+               //  https://cppsecrets.com/users/189897115119971161041034955641
+               //    03495564103109971051084699111109/C00-OpenCV-cvinRange.php
+               //  This solves the problem that there are two ranges of red
+               //  pixels: from about 200-255 and also from 0-40
+               //  Threshold the HSV image; keep only the red pixels
+               cv::inRange( hsvImg, cv::Scalar(0, lowSRed, lowVRed),
+                            cv::Scalar(highHRed, highSRed, highVRed),
+                            lower_red_hue_range );
+               cv::inRange( hsvImg, cv::Scalar( lowHRed, lowSRed, lowVRed),
+                            cv::Scalar(255, highSRed, highVRed),
+                            upper_red_hue_range );
+                                               // Combine the above two images
+               cv::addWeighted( lower_red_hue_range, 1.0,
+                                upper_red_hue_range, 1.0, 0.0, threshImg );
+            } else {      // else blue alliance, no image-combination required
+               cv::inRange( hsvImg, cv::Scalar(lowHBlue, lowSBlue, lowVBlue),
+                            cv::Scalar(highHBlue, highSBlue, highVBlue),
+                            threshImg );
+            }
                                                                   //Blur Effect
             cv::GaussianBlur( threshImg, threshImg, cv::Size(9, 9), 0);
             cv::dilate( threshImg, threshImg, 0 );      // Dilate Filter Effect
@@ -503,9 +678,9 @@ class Robot : public frc::TimedRobot {
                               threshImg.rows / 2,   // min dist between centers
                                                     // of the detected circles
                               100,          // param1 (edge detector threshold)
-                              84,  // p2: increase this to reduce false circles
-                              24,  // was 20           // minimum circle radius
-                              64 );  // was 56         // maximum circle radius
+                              56,  // p2: increase this to reduce false circles
+                              minCircleRadius,         // minimum circle radius
+                              maxCircleRadius );       // maximum circle radius
                               // was: threshImg.rows / 4, 100, 50, 10, 800 );
 
             iBiggestCircleIndex = -1;     // init to an impossible index
@@ -611,9 +786,27 @@ class Robot : public frc::TimedRobot {
             v3fCircles.clear();
 
          } // if we got an image
+         if ( 0 == iLoopCount%50 ) {   // every few seconds, check if we
+                                       // are still on the same alliance
+            if ( frc::DriverStation::kRed ==
+                                          frc::DriverStation::GetAlliance() ) {
+               if ( !WeAreOnRedAlliance ) {
+                  WeAreOnRedAlliance = true;    // we are now on red alliance
+                  cout << "VisionThread(): We are now on the Red Alliance."
+                       << endl;
+               }
+            } else {
+               if ( WeAreOnRedAlliance ) {
+                  WeAreOnRedAlliance = false;   // we are now on blue alliance
+                  cout << "VisionThread(): We are now on the Blue Alliance."
+                       << endl;
+               }
+            }
+         }
          iLoopCount++;
       }   // do while 
    }      // VisionThread() 
+#endif  // if VISION_PROCESSING
 
  public:
 
@@ -623,9 +816,9 @@ class Robot : public frc::TimedRobot {
       /* in a different order than usual.                                    */
       /*---------------------------------------------------------------------*/
    void SwitchCameraIfNecessary( void ) {
-              // Switch cameras if console button 5 pressed.
-      if ( !sPrevState.conButton[5] &&
-            sCurrState.conButton[5]    ) {
+             // Switch cameras if the "switch camera" button is newly-pressed.
+      if ( !BUTTON_SWITCHCAMERA_PREV &&
+            BUTTON_SWITCHCAMERA         ) {
 
          powercellOnVideo.SwitchToColorWheelCam =
                    !powercellOnVideo.SwitchToColorWheelCam;
@@ -650,9 +843,12 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void GetAllVariables()  {
 
+      static int iCallCount = 0;
+      iCallCount++;
                                 // use frc::Timer::GetFPGATimestamp() instead?
       // dTimeOfLastCall = frc::GetTime();
-//      cout << std::setw( 20 ) << std::setprecision( 16 ) << dTimeOfLastCall << " ";
+      //      cout << std::setw( 20 ) << std::setprecision( 16 ) <<
+      //              dTimeOfLastCall << " ";
 
 
       sPrevState = sCurrState;                  // save all previous variables
@@ -668,16 +864,108 @@ class Robot : public frc::TimedRobot {
       }
       sCurrState.conButton[12] = m_console.GetRawButton(12);
 
-      sCurrState.iLSMasterPosition = m_motorLSMaster.GetSelectedSensorPosition();
-      sCurrState.iRSMasterPosition = m_motorRSMaster.GetSelectedSensorPosition();
-      sCurrState.iTSMasterPosition = m_motorTopShooter.GetSelectedSensorPosition();
-      sCurrState.iBSMasterPosition = m_motorBotShooter.GetSelectedSensorPosition();
-      sCurrState.iLSMasterVelocity = m_motorLSMaster.GetSelectedSensorVelocity();
-      sCurrState.iRSMasterVelocity = m_motorRSMaster.GetSelectedSensorVelocity();
-      sCurrState.iTSMasterVelocity = m_motorTopShooter.GetSelectedSensorVelocity();
-      sCurrState.iBSMasterVelocity = m_motorBotShooter.GetSelectedSensorVelocity();
+                // Get encoder position values.  Units are in motor rotations.
+      sCurrState.dLSMasterPosition = m_LSMasterEncoder.GetPosition();
+      sCurrState.dRSMasterPosition = m_RSMasterEncoder.GetPosition();
 
-      pigeonIMU.GetYawPitchRoll( sCurrState.yawPitchRoll );
+      sCurrState.iTSMasterPosition =
+                                m_motorTopShooter.GetSelectedSensorPosition();
+      sCurrState.iBSMasterPosition =
+                                m_motorBotShooter.GetSelectedSensorPosition();
+        // Get encoder velocity values.  Units are motor rotations per minute.
+        // These values may be incorrect; they are delayed ~110 millisecs.
+      sCurrState.dLSMasterVelocity = m_LSMasterEncoder.GetVelocity();
+      sCurrState.dRSMasterVelocity = m_RSMasterEncoder.GetVelocity();
+
+      sCurrState.iTSMasterVelocity =
+                                m_motorTopShooter.GetSelectedSensorVelocity();
+      sCurrState.iBSMasterVelocity =
+                                m_motorBotShooter.GetSelectedSensorVelocity();
+
+// jag; if ( 0 == iCallCount%100 ) {
+// jag;   cout << "Shoot speeds: " << sCurrState.iBSMasterVelocity * 600 / 4096;
+// jag;   cout << "/" << sCurrState.iTSMasterVelocity * 600 / 4096 << endl;
+// jag; }
+
+//    pigeonIMU.GetYawPitchRoll( sCurrState.yawPitchRoll );
+      sCurrState.yawPitchRoll[0] = (double)gyro.GetAngle();
+      sCurrState.yawPitchRoll[1] = (double)gyro.GetRate();
+      sCurrState.rateXYZ[2]      = (double)sCurrState.yawPitchRoll[1];
+
+               // Has the gyro rate updated? (the Pigeon only updates every
+               // 0.1 second; we don't know how often the ADIS gyro updates)
+      if ( sPrevState.rateXYZ[2] != sCurrState.rateXYZ[2] ) {
+                            // yes; record actual value (correct our estimate)
+         sCurrState.yawRateEstimate = sCurrState.rateXYZ[2];
+         if ( 30.0 < abs( sCurrState.yawRateEstimate -
+                          sPrevState.yawRateEstimate   ) ) {
+            cout << "yawRate correction: " << sPrevState.yawRateEstimate <<
+                    "/" << sCurrState.yawRateEstimate << endl;
+         }
+      } else { // Else the gyro hasn't updated the yaw rate (it only seems
+               // to update every 0.1 second), so we estimate the current
+               // value ourselves here.  We calculate the rate using the
+               // diff between left/right wheel encoder position changes,
+               // divided by the time between ticks (20 milliseconds).
+               // Remember that the left side motors of the robot drive
+               // positive backward, and right side motors positive forward.
+         double tempYawRateEstimate = 0.0;
+             // get total encoder rotations since last tick (20 millisecs ago)
+         double dTotalEncoderRotsLS = (double)sCurrState.dLSMasterPosition -
+                                              sPrevState.dLSMasterPosition;
+         double dTotalEncoderRotsRS = (double)sCurrState.dRSMasterPosition -
+                                              sPrevState.dRSMasterPosition;
+                    // Calculate inches of travel on each side
+                    // The SparkMax encoder reports position in units of motor
+                    // rotations, so we have to divide by the gear ratio
+                    // (which is 10.71:1 for the drivetrain in this robot)
+                    // to get wheel rotations, then multiply by (pi * 6")
+                    // to get inches along the ground.
+                 // (number of Rotations) * (pi) * (wheel diameter in inches) /
+                 //  gear ratio
+         double dDistanceDrivenLS = dTotalEncoderRotsLS * ( 3.14159 * 6.0 /
+                                                                      10.71 );
+         double dDistanceDrivenRS = dTotalEncoderRotsRS * ( 3.14159 * 6.0 /
+                                                                      10.71 );
+                  // Calculate the yaw rate.
+                  // 24.0 is the width of the robot, in inches.
+                  // 180.0 / 3.14159 is for the conversion to degrees.
+                  // 0.02 is the number of seconds between ticks
+                  // (the 20-millisecond period between calls).
+                  // The "dDistanceDriven" variables are added to each other,
+                  // because the left side drives positive backward, and the
+                  // right side positive forward, so positive numbers in each
+                  // both mean the robot is turning left (which is a positive
+                  // yaw rate, according to the gyro).
+         tempYawRateEstimate = ( 180.0 / 3.14159 / 24.0 / 0.02 ) *
+                                    ( dDistanceDrivenLS + dDistanceDrivenRS );
+                          // If the newly-calculated value is more than
+                          // 30 degrees/sec different from the previous value
+         if ( 50.0 < abs( tempYawRateEstimate -
+                          sCurrState.yawRateEstimate ) ) {
+            // cout << "Yaw rate: " << sCurrState.yawRateEstimate << ":" <<
+            //                         tempYawRateEstimate << endl;
+                                       // They're too far apart; average them.
+            sCurrState.yawRateEstimate =
+                         ( sCurrState.yawRateEstimate + tempYawRateEstimate )/2;
+         } else {
+            sCurrState.yawRateEstimate = tempYawRateEstimate;
+         }
+      }  // else the gyro didn't update the yaw rate
+
+           // Has the gyro position updated? (it only updates every 0.1 second)
+      if ( sPrevState.yawPitchRoll[0] != sCurrState.yawPitchRoll[0] ) {
+                            // yes; record actual value (correct our estimate)
+         sCurrState.yawPosnEstimate = sCurrState.yawPitchRoll[0];
+         if ( 10.0 < abs( sCurrState.yawPosnEstimate -
+                          sPrevState.yawPosnEstimate   ) ) {
+            cout << "yawPosn correction: " << sPrevState.yawPosnEstimate <<
+                    "/" << sCurrState.yawPosnEstimate << endl;
+         }
+      } else { // Else the gyro hasn't updated the yaw position, so
+               // we estimate the current value ourselves here
+         sCurrState.yawPosnEstimate += sCurrState.yawRateEstimate * 0.02;
+      }
 
                   // Record the positions of powercells in the conveyor system.
                   // The Digital I/O (DIO) connections are made to IR sensors,
@@ -695,6 +983,116 @@ class Robot : public frc::TimedRobot {
 
 
       /*---------------------------------------------------------------------*/
+      /* AdjustJoystickValues()                                              */
+      /* Adjust the X and Y values coming from the joystick, for the zero    */
+      /* deadband, joystick sensitivity, etc.                                */
+      /* This should only be called or used in teleop mode; in all other     */
+      /* modes the joystick values used are generated by the program itself  */
+      /* and should not be adjusted.                                         */
+      /*---------------------------------------------------------------------*/
+   void AdjustJoystickValues( void ) {
+      double adjustedJoyY;
+      double adjustedJoyX;
+
+              // our joystick increases Y when pulled BACKWARDS, and increases
+              // X when pushed to the right.
+
+      adjustedJoyY = sCurrState.joyY;
+      adjustedJoyX = sCurrState.joyX;
+
+      if ( ( -0.045 < adjustedJoyY ) && ( adjustedJoyY < 0.025 ) ) {
+         adjustedJoyY = 0.0;
+      } else {
+         if ( BUTTON_CARTESIANDRIVE ) {     // if in field-oriented drive mode
+            adjustedJoyY = -sCurrState.joyY;               // just invert joyY
+         } else {                  // else in normal robot-oriented drive mode
+            if ( BUTTON_REVERSE ) {          // if "reverse" button is pressed
+                    // do not invert joyY, so forward is towards the limelight
+               adjustedJoyY = sCurrState.joyY*abs(sCurrState.joyY);
+            } else {                      // else "reverse" button not pressed
+                     // invert joyY so forward is towards the intake
+               adjustedJoyY = -sCurrState.joyY*abs(sCurrState.joyY);
+            }
+         }
+      }
+      if ( ( -0.105 < adjustedJoyX ) && ( adjustedJoyX < 0.025 ) ) {
+         adjustedJoyX = 0.0;
+      } else {
+         if ( !BUTTON_CARTESIANDRIVE ) { // if not in field-oriented drive mode
+            adjustedJoyX = sCurrState.joyX*abs(sCurrState.joyX);
+         }
+      }
+#ifdef SAFETY_LIMITS
+                        // multiply both settings by 0.75 for extra safety
+      adjustedJoyY *= .75;
+      adjustedJoyX *= .75;
+#endif
+
+          // Squaring the joystick inputs (while preserving the sign)
+          // decreases the input sensitivity at low speeds, allowing
+          // more accurate driver control.  It increases fine control
+          // at low speeds, but still permits full power when the
+          // joystick is thrown all the way to its limit.
+      if ( !BUTTON_CARTESIANDRIVE ) { // if not in field-oriented drive mode
+         adjustedJoyY = std::copysign( adjustedJoyY * adjustedJoyY,
+                                       adjustedJoyY );
+         adjustedJoyX = std::copysign( adjustedJoyX * adjustedJoyX,
+                                       adjustedJoyX );
+      }
+
+      sCurrState.joyY = adjustedJoyY;
+      sCurrState.joyX = adjustedJoyX;
+   }      // AdjustJoystickValues()
+
+
+#ifdef DISP_SMARTDASHBOARD
+   void AdjustPIDValues( void ) {
+                              // read PID coefficients from the SmartDashboard
+      double p   = frc::SmartDashboard::GetNumber( "P Gain", 0 );
+      double i   = frc::SmartDashboard::GetNumber( "I Gain", 0 );
+      double d   = frc::SmartDashboard::GetNumber( "D Gain", 0 );
+      double iz  = frc::SmartDashboard::GetNumber( "I Zone", 0 );
+      double ff  = frc::SmartDashboard::GetNumber( "Feed Forward", 0 );
+      double min = frc::SmartDashboard::GetNumber( "Min Output", 0 );
+      double max = frc::SmartDashboard::GetNumber( "Max Output", 0 );
+
+                      // If PID coefficients from SmartDashboard have changed,
+                      // write new values to controllers.
+      if ( p != DrivePIDkP ) {
+         DrivePIDkP = p;
+         m_LSMasterPID.SetP( DrivePIDkP );
+         m_RSMasterPID.SetP( DrivePIDkP );
+      }
+      if ( i != DrivePIDkI ) {
+         DrivePIDkI = i;
+         m_LSMasterPID.SetI( DrivePIDkI );
+         m_RSMasterPID.SetI( DrivePIDkI );
+      }
+      if ( d != DrivePIDkD ) {
+         DrivePIDkD = d;
+         m_LSMasterPID.SetD( DrivePIDkD );
+         m_RSMasterPID.SetD( DrivePIDkD );
+      }
+      if ( iz != DrivePIDkIz ) {
+         DrivePIDkIz = iz;
+         m_LSMasterPID.SetIZone( DrivePIDkIz );
+         m_RSMasterPID.SetIZone( DrivePIDkIz );
+      }
+      if ( ff != DrivePIDkFF ) {
+         DrivePIDkFF = ff;
+         m_LSMasterPID.SetFF( DrivePIDkFF );
+         m_RSMasterPID.SetFF( DrivePIDkFF );
+      }
+      if ( ( min != DrivePIDkMinOutput ) || ( max != DrivePIDkMaxOutput ) ) {
+         DrivePIDkMinOutput = min;
+         DrivePIDkMaxOutput = max;
+         m_LSMasterPID.SetOutputRange( min, max );
+         m_RSMasterPID.SetOutputRange( min, max );
+      }
+   }   // AdjustPIDValues()
+#endif
+
+      /*---------------------------------------------------------------------*/
       /* JoystickDisplay()                                                   */
       /* Display all the joystick values on the console log.                 */
       /*---------------------------------------------------------------------*/
@@ -709,18 +1107,44 @@ class Robot : public frc::TimedRobot {
       /* Display all the yaw pitch & roll values on the console log.         */
       /*---------------------------------------------------------------------*/
    void IMUOrientationDisplay( void ) {
-         cout << "pigeonIMU (yaw/pitch/roll): " <<
+//       cout << "pigeonIMU (yaw/pitch/roll): " <<
+         cout << "ADIS_IMU (yaw/pitch/roll+yrate): " <<
                sCurrState.yawPitchRoll[0] << "/" <<
                sCurrState.yawPitchRoll[1] << "/" <<
-               sCurrState.yawPitchRoll[2] << endl;
+               sCurrState.yawPitchRoll[2] << "+" <<
+               sCurrState.rateXYZ[2] << endl;
 //         cout << "pigeontemp: " << pigeonIMU.GetTemp() << endl; 
+//         cout << "gyro_temp: " << gyro.GetTemp() << endl; 
    }      // IMUOrientationDisplay()
 
 
       /*---------------------------------------------------------------------*/
+      /* MotorDisplaySpark()                                                 */
+      /* Display all the current motor values for a specified                */
+      /* SparkMax-controlled motor on the console log.                       */
+      /*---------------------------------------------------------------------*/
+   void MotorDisplaySpark( const char * cTitle,
+                           rev::CANSparkMax & m_motor,
+                           rev::SparkMaxRelativeEncoder & m_motorEncoder,
+                           struct sMotorState & sMState ) {
+      double motorVelocity = m_motorEncoder.GetVelocity();
+      cout << cTitle << " vel(min:max)tgt/% A (pos): ";
+      cout << setw(5) << motorVelocity;
+      cout << "(" << setw(5) << sMState.sensorVmin << ":";
+      cout <<        setw(5) << sMState.sensorVmax << ")";
+      cout << setw(5) << sMState.targetVelocityRPM << "/ ";
+      cout << setw(3) << m_motor.GetAppliedOutput() << "% ";
+      cout << setw(5) << m_motor.GetOutputCurrent() << "A ";
+      cout << "(" << setw(10) << m_motorEncoder.GetPosition() << ")";
+      cout << endl;
+      sMState.sensorVmin = sMState.sensorVmax = motorVelocity;
+   }      // MotorDisplaySpark()
+
+
+      /*---------------------------------------------------------------------*/
       /* MotorDisplay()                                                      */
-      /* Display all the current motor values for a specified motor on the   */
-      /* console log.                                                        */
+      /* Display all the current motor values for a specified Talon- or      */
+      /* Victor-driven motor on the console log.                             */
       /*---------------------------------------------------------------------*/
    void MotorDisplay( const char * cTitle,
                       WPI_TalonSRX & m_motor,
@@ -740,9 +1164,26 @@ class Robot : public frc::TimedRobot {
 
 
       /*---------------------------------------------------------------------*/
+      /* motorFindMinMaxVelocitySpark()                                      */
+      /* Keep a motor's Vmin and Vmax updated, for display on the            */
+      /* console log (this version is for SparkMax-driven motors).           */
+      /*---------------------------------------------------------------------*/
+   void motorFindMinMaxVelocitySpark(
+                                rev::SparkMaxRelativeEncoder & m_motorEncoder,
+                                struct sMotorState & sMState ) {
+      double motorVelocity = m_motorEncoder.GetVelocity();
+      if ( motorVelocity < sMState.sensorVmin ) {
+         sMState.sensorVmin = motorVelocity;
+      } else if ( sMState.sensorVmax < motorVelocity ) {
+         sMState.sensorVmax = motorVelocity;
+      }
+   }      // motorFindMinMaxVelocitySpark()
+
+
+      /*---------------------------------------------------------------------*/
       /* motorFindMinMaxVelocity()                                           */
       /* Keep a motor's Vmin and Vmax updated, for display on the            */
-      /* console log.                                                        */
+      /* console log (this version is for Talon- or Victor-driven motors).   */
       /*---------------------------------------------------------------------*/
    void motorFindMinMaxVelocity( WPI_TalonSRX & m_motor,
                                  struct sMotorState & sMState ) {
@@ -776,34 +1217,150 @@ class Robot : public frc::TimedRobot {
                   /* 4096 Units/Rev * 500 RPM / 600 100ms/min               */
                   /* So code to drive the robot at up to 500 rpm in either  */
                   /* direction could look like this:                        */
-      double  leftMotorOutput = 0.0;
-      double rightMotorOutput = 0.0;
+      double LSMasterOutput = 0.0;
+      double RSMasterOutput = 0.0;
       // m_drive.StopMotor();
-      if ( ( -0.045 < desiredForward ) && ( desiredForward < 0.025 ) ) {
-         desiredForward = 0.0;
-      }
-      if ( ( -0.105 < desiredTurn ) && ( desiredTurn < 0.025 ) ) {
-         desiredTurn = 0.0;
-      }
-      leftMotorOutput  = -desiredForward - desiredTurn;
-      rightMotorOutput = +desiredForward - desiredTurn;
-      leftMotorOutput  = std::min(  1.0, leftMotorOutput );
-      rightMotorOutput = std::min(  1.0, rightMotorOutput );
-      leftMotorOutput  = std::max( -1.0, leftMotorOutput );
-      rightMotorOutput = std::max( -1.0, rightMotorOutput );
-      m_motorLSMaster.Set( ControlMode::Velocity, 
-                          leftMotorOutput  * 5200.0 * 4096 / 600 );
-      m_motorRSMaster.Set( ControlMode::Velocity, 
-                           rightMotorOutput * 5200.0 * 4096 / 600 );
-      LSMotorState.targetVelocity_UnitsPer100ms = leftMotorOutput  *
-	                                          5200.0 * 4096 / 600 ;
-      RSMotorState.targetVelocity_UnitsPer100ms = rightMotorOutput *
-	                                          5200.0 * 4096 / 600 ;
-      //m_motorLSMaster.Set( ControlMode::PercentOutput, 
-                           //leftMotorOutput  * 500.0 * 4096 / 600 / 1024);
-      //m_motorRSMaster.Set( ControlMode::PercentOutput, 
-                           //rightMotorOutput * 500.0 * 4096 / 600 / 1024);
+#ifdef SAFETY_LIMITS
+                           // for safety: allow limited range only -0.4 to 0.4
+      desiredForward = std::min(  0.2, desiredForward );
+      desiredTurn    = std::min(  0.2, desiredTurn  );
+      desiredForward = std::max( -0.2, desiredForward );
+      desiredTurn    = std::max( -0.2, desiredTurn  );
+#else
+                           // safety mode off: allow full range of -1.0 to 1.0
+      desiredForward = std::min(  1.0, desiredForward );
+      desiredTurn    = std::min(  1.0, desiredTurn  );
+      desiredForward = std::max( -1.0, desiredForward );
+      desiredTurn    = std::max( -1.0, desiredTurn  );
+#endif
+      LSMasterOutput = -desiredForward - desiredTurn;
+      RSMasterOutput = +desiredForward - desiredTurn;
+      LSMasterOutput = std::min(  1.0, LSMasterOutput );
+      RSMasterOutput = std::min(  1.0, RSMasterOutput );
+      LSMasterOutput = std::max( -1.0, LSMasterOutput );
+      RSMasterOutput = std::max( -1.0, RSMasterOutput );
+// jag; 10feb2022 -- for testing the new NEO motor, controlled by a SparkMax:
+// These are simple "PercentOutput" outputs, rather than from a PID.
+//    m_motorLSMaster.Set( LSMasterOutput  );
+//    m_motorRSMaster.Set( RSMasterOutput );
+        // jag; from https://github.com/REVRobotics/SPARK-MAX-Examples/ :
+           // PIDController objects are commanded to a set point using the
+           // SetReference() method.
+           // The first parameter is the value of the set point, whose units
+           // vary depending on the control type set in the second parameter.
+           // The second parameter is the control type, which can be set
+           // to one of these values:
+           //    rev::CANSparkMax::ControlType::kDutyCycle
+           //    rev::CANSparkMax::ControlType::kPosition
+           //    rev::CANSparkMax::ControlType::kVelocity
+           //    rev::CANSparkMax::ControlType::kVoltage
+           //    rev::CANSparkMax::ControlType::kCurrent
+           //        (and kSmartMotion and kSmartVelocity)
+           // Note that the setpoint is specified in RPM, not encoder ticks.
+      m_LSMasterPID.SetReference( LSMasterOutput * DriveMaxRPM,
+                                  rev::CANSparkMax::ControlType::kVelocity );
+      m_RSMasterPID.SetReference( RSMasterOutput * DriveMaxRPM,
+                                  rev::CANSparkMax::ControlType::kVelocity );
+      LSMotorState.targetVelocityRPM = LSMasterOutput * DriveMaxRPM; 
+      RSMotorState.targetVelocityRPM = RSMasterOutput * DriveMaxRPM;
+#ifdef DISP_SMARTDASHBOARD
+                         // Display Drive Motor Speeds on the SmartDashboard.
+                         // NOTE: There are comments on ChiefDelphi that
+                         //       the REV encoders have an unavoidable
+                         //       measurement delay of ~110 milliseconds, and
+                         //       that delay affects internal velocity loops.
+                         //       We may have to adjust for that.
+      frc::SmartDashboard::PutNumber( "LeftDrive Desired Speed",
+                                      LSMasterOutput * DriveMaxRPM );
+      frc::SmartDashboard::PutNumber( "LeftDrive Current Speed",
+                                      m_LSMasterEncoder.GetVelocity() );
+      frc::SmartDashboard::PutNumber( "LeftDrive Current Position",
+                                      m_LSMasterEncoder.GetPosition() );
+      frc::SmartDashboard::PutNumber( "RightDrive Desired Speed",
+                                      RSMasterOutput * DriveMaxRPM );
+      frc::SmartDashboard::PutNumber( "RightDrive Current Speed",
+                                      m_RSMasterEncoder.GetVelocity() );
+      frc::SmartDashboard::PutNumber( "RightDrive Current Position",
+                                      m_RSMasterEncoder.GetPosition() );
+#endif
    }      // Team4918Drive()
+
+
+      /*---------------------------------------------------------------------*/
+      /* DriveCartesianByJoystick()                                          */
+      /* Drive robot according to the commanded Y and X joystick position,   */
+      /* where the position of the joystick indicates which direction of the */
+      /* field to drive toward, regardless of which way the robot is         */
+      /* currently pointed.                                                  */
+      /* The baseline (zero degree) direction is the direction the robot was */
+      /* pointed when first powered up, which is expected to be in the       */
+      /* direction the driver is facing.                                     */
+      /*---------------------------------------------------------------------*/
+   void DriveCartesianByJoystick( void ) {
+      double desiredHeading;
+      double desiredSpeed;
+      double currentHeading;
+      double headingDifference;
+
+      desiredSpeed = sqrt( sCurrState.joyY * sCurrState.joyY +
+                           sCurrState.joyX * sCurrState.joyX   );
+                       // Protect against dividing by zero (giving the atan2()
+                       // function below arguments which are too small).
+      if ( 0.1 < desiredSpeed ) {
+              // Our joystick increases Y when pulled BACKWARDS, and increases
+              // X when pushed to the right.  This should have already been
+              // adjusted by the "AdjustJoystickValues() function if we are
+              // in Teleop mode, so this function assumes positive joyY is
+              // forward, and positive joyX is to the right.
+              // In this case:
+              //    positive joyY points toward the 0-degree heading,
+              //    negative joyY points toward 180 degrees,
+              //    positive joyX points toward the 270-degree heading, and
+              //    negative joyX points toward  90 degrees,
+         desiredHeading = atan2( -sCurrState.joyX, sCurrState.joyY ) *
+                                                          ( 180.0 / 3.14159 );
+                                // desiredHeading ranges from -180.0 to +180.0
+                                // convert it to range from 0.0 to 360.0
+                                // NOT NECESSARY.
+         // desiredHeading = std::fmod( desiredHeading + 360.0, 360.0 );
+
+                     // currentHeading is the current heading of the robot
+                     // within the range 0.0 to 360.0
+         // currentHeading =  std::fmod( sCurrState.yawPosnEstimate, 360.0 );
+            // Don't bother correcting the range to 0-360; the arithmetic
+            // below works even if currentHeading ranges from -36000 to +36000
+         currentHeading =  sCurrState.yawPosnEstimate;
+
+         headingDifference =
+                std::fmod( desiredHeading - currentHeading + 36000.0, 360.0 );
+
+         // cout << "des/cur/diff Hdg: " << desiredHeading <<
+         //                          "/" << currentHeading <<
+         //                          "/" << headingDifference << endl;
+
+         if ( headingDifference < 180.0 ) {
+            desiredHeading = sCurrState.yawPosnEstimate + headingDifference;
+         } else {
+            desiredHeading = sCurrState.yawPosnEstimate + headingDifference -
+                                                                        360.0;
+         }
+
+                       // If the robot is currently pointed within 20 degrees
+                       // of the desired heading
+         if ( abs( desiredHeading - sCurrState.yawPosnEstimate ) < 20.0 ) {
+            DriveToDistance( desiredHeading,       // heading in degrees
+                             desiredSpeed * 4.0,   // distance in feet,
+                             false,          // whether to divert to powercell
+                             true  );        // whether to initialize distance
+         } else {
+                                              // (handle initialization later)
+            TurnToHeading( desiredHeading, false );
+         }
+      } else {
+         Team4918Drive( 0.0, 0.0 );  // Stop the robot
+      }
+
+   }      // DriveCartesianByJoystick()
 
 
       /*---------------------------------------------------------------------*/
@@ -814,33 +1371,24 @@ class Robot : public frc::TimedRobot {
       double desiredForward;
       double desiredTurn;
 
-         // m_drive.ArcadeDrive( m_stick.GetY(), -m_stick.GetX() );
-              // our joystick increases Y when pulled BACKWARDS, and increases
-              // X when pushed to the right.
-      //if ( sCurrState.joyButton[2] ) {
-      //   desiredForward = sCurrState.joyY*abs(sCurrState.joyY);
-      //} else {
-      //   desiredForward = -sCurrState.joyY*abs(sCurrState.joyY);
-      //}
-      //desiredTurn = sCurrState.joyX*abs(sCurrState.joyX);
-      desiredForward = sCurrState.joyY;
-      desiredTurn = sCurrState.joyX;
+              // Our joystick increases Y when pulled BACKWARDS, and increases
+              // X when pushed to the right.  This should have already been
+              // adjusted by the "AdjustJoystickValues() function if we are
+              // in Teleop mode, so this function assumes positive joyY is
+              // forward, and positive joyX is to the right.
+              // (Or in Cartesian, field-oriented drive mode:
+              //    positive joyY is toward the 0-degree direction, and
+              //    positive joyX is toward the to the right
+              //                                (the 270-degree direction) ).
 
-      if ( ( -0.045 < desiredForward ) && ( desiredForward < 0.025 ) ) {
-         desiredForward = 0.0;
+      if ( BUTTON_CARTESIANDRIVE ) {
+         DriveCartesianByJoystick();
       } else {
-         if ( sCurrState.joyButton[2] ) {     // if "reverse" button is pressed
-            desiredForward = sCurrState.joyY*abs(sCurrState.joyY);
-         } else {
-            desiredForward = -sCurrState.joyY*abs(sCurrState.joyY);
-         }
+         desiredForward = sCurrState.joyY;
+         desiredTurn    = sCurrState.joyX;
+
+         Team4918Drive( desiredForward, desiredTurn );
       }
-      if ( ( -0.105 < desiredTurn ) && ( desiredTurn < 0.025 ) ) {
-         desiredTurn = 0.0;
-      } else {
-         desiredTurn = sCurrState.joyX*abs(sCurrState.joyX);
-      }
-      Team4918Drive( desiredForward, desiredTurn );
    }      // DriveByJoystick()
 
 
@@ -901,10 +1449,12 @@ class Robot : public frc::TimedRobot {
          }
 
       } else {                    // else limelight data is not valid any more
-         // should we continue forward here?
-         // m_drive.CurvatureDrive( 0.0, 0, 0 );                // stop the robot
-         Team4918Drive( 0.0, 0.0 );
-         // DriveByJoystick();     // no powercell seen, drive according to joystick
+         if ( !sCurrState.teleop ) {  // If not in teleop mode
+            sCurrState.joyY = 0.3;    // then simulate some joystick settings
+            sCurrState.joyX = 0.0;
+         }
+                      // No limelight target seen; drive according to joystick
+         DriveByJoystick();
          returnVal = false;
       }
 
@@ -930,13 +1480,17 @@ class Robot : public frc::TimedRobot {
       static int  iCallCount = 0;
 
       iCallCount++;
-      m_motorIntake.Set( ControlMode::PercentOutput, -0.4 );
+      if (  sCurrState.powercellInIntake ) {       // if powercell in intake
+         m_motorIntake.Set( ControlMode::PercentOutput,  0.1 ); // be gentle
+      } else {
+         m_motorIntake.Set( ControlMode::PercentOutput,  0.4 ); // be strong
+      }
       RunConveyor();
 
       if ( powercellOnVideo.SeenByCamera ) {      // if USB video data is valid
          double autoDriveSpeed;
-	     // jag; 08jan2022: should change these comments to say we may have
-	     // found a "red" or "blue" cargo rather than a yellow powercell.
+             // jag; 08jan2022: should change these comments to say we may have
+             // found a "red" or "blue" cargo rather than a yellow powercell.
              // If powercellOnVideo.SeenByCamera is true, that means that the
              // vision-processing code in VisionThread() has found a yellow
              // circle in the latest video frame from the USB videocamera (and
@@ -953,24 +1507,28 @@ class Robot : public frc::TimedRobot {
              // We could change the if/else statements below to calculate
              // autoDriveSpeed by using a math expression based on
              // powercellOnVideo.Y values.
-	     // jag; 22mar2021: all these values have been changed; it may be
-	     // useful to compare with the original working code in
-	     // ~/Desktop/2020-Robot/Robot.cpp
-//         if        ( powercellOnVideo.Y < -50 ) {  // if we're super close
-//            autoDriveSpeed = -0.35;   //   go backward slowly
-//         } else if ( powercellOnVideo.Y < -30 ) {  // if we're super close
-//            autoDriveSpeed = -0.25;   //   go backward slowly
-//            autoDriveSpeed = -0.35 * float( - 30 - powercellOnVideo.Y ) / 20.0;
-//         } else if ( powercellOnVideo.Y < 0 )   { // if we're really close...
-//            autoDriveSpeed = 0.0;     //   stop (or 0.08 to go slow)
-         /* } else */ if ( powercellOnVideo.Y <  20 ) {  // if we're a little farther
-            autoDriveSpeed = 0.15;    //   go a little faster
-            autoDriveSpeed = 0.20 * float( powercellOnVideo.Y ) / 20.0;
+             // jag; 22mar2021: all these values have been changed; it may be
+             // useful to compare with the original working code in
+             // ~/Desktop/2020-Robot/Robot.cpp
+#ifdef JAG_SAFEMODE
+         if        ( powercellOnVideo.Y < -50 ) {  // if we're super close
+            autoDriveSpeed = -0.35;   //   go backward slowly
+         } else if ( powercellOnVideo.Y < -30 ) {  // if we're super close
+            autoDriveSpeed = -0.25;   //   go backward slowly
+            autoDriveSpeed = -0.35 * float( - 30 - powercellOnVideo.Y ) / 20.0;
+         } else if ( powercellOnVideo.Y < 0 )   { // if we're really close...
+            autoDriveSpeed = 0.0;     //   stop (or 0.08 to go slow)
+         } else if ( powercellOnVideo.Y <  20 ) {  // if we're a little farther
+#else
+         if ( powercellOnVideo.Y < 0 )   { // if we're really close...
+#endif
+            autoDriveSpeed = 0.35;    //   go a little faster
+            // autoDriveSpeed = 0.20 * float( powercellOnVideo.Y ) / 20.0;
          } else if (  powercellOnVideo.Y < 40 ) {  // if we're farther still...
-            autoDriveSpeed = 0.20;    //   go a little faster still
-            autoDriveSpeed = 0.20 + 0.20 * float( powercellOnVideo.Y - 20 ) / 40.0;
+            autoDriveSpeed = 0.40;    //   go a little faster still
+            // autoDriveSpeed = 0.20 + 0.20 * float( powercellOnVideo.Y - 20 ) / 40.0;
          } else {                     // else we must be really far...
-            autoDriveSpeed = 0.30;    //   go as fast as we dare
+            autoDriveSpeed = 0.45;    //   go as fast as we dare
          }
 
                           // LATER: May want to modify autoDriveSpeed depending
@@ -979,27 +1537,32 @@ class Robot : public frc::TimedRobot {
 
          // May have to add/subtract a constant from x-values here, to account
          // for the offset of the camera away from the centerline of the robot.
-         if        ( 0 <= powercellOnVideo.X ) {
+         if        ( 50 <= powercellOnVideo.X ) {
                              // if target to the right, turn towards the right
             //m_drive.CurvatureDrive( -autoDriveSpeed,
             //                        -sqrt((powercellOnVideo.X/300.0)), 1 );
-            Team4918Drive( autoDriveSpeed, sqrt(powercellOnVideo.X/300.0) );
-         } else if ( powercellOnVideo.X < 0 ) {
+            Team4918Drive( autoDriveSpeed/1.5,
+                           powercellOnVideo.X/500.0 );
+                           // sqrt(powercellOnVideo.X/400.0)/2 );
+         } else if ( powercellOnVideo.X < -50 ) {
                                // if target to the left, turn towards the left
             //m_drive.CurvatureDrive( -autoDriveSpeed,
             //                        sqrt((-powercellOnVideo.X/300.0)), 1 );
-            Team4918Drive( autoDriveSpeed, -sqrt(-powercellOnVideo.X/300.0) );           
+            Team4918Drive( autoDriveSpeed/1.5,
+                           powercellOnVideo.X/500.0 );
+                           // -sqrt(-powercellOnVideo.X/400.0)/2 );
          } else {
             //m_drive.CurvatureDrive( -autoDriveSpeed, 0, 0 );
 
-            Team4918Drive( autoDriveSpeed, 0.0 );     // drive straight forward
+            Team4918Drive( autoDriveSpeed/1.5, 0.0 ); // drive straight forward
          }
 
       } else {               // else USB videocamera data is not valid any more
-         // should we continue forward here?
-         // m_drive.CurvatureDrive( 0.0, 0, 0 );              // stop the robot
-         //Team4918Drive( 0.0, 0.0 );
-         DriveByJoystick();   // no powercell seen, drive according to joystick
+         if ( !sCurrState.teleop ) {  // If not in teleop mode
+            sCurrState.joyY = 0.3;    // then simulate some joystick settings
+            sCurrState.joyX = 0.0;
+         }
+         DriveByJoystick();   // No powercell seen; drive according to joystick
          returnVal = false;
       }
 
@@ -1027,144 +1590,67 @@ class Robot : public frc::TimedRobot {
       //m_shiftingSolenoid.Set(true);     // high gear?
       //m_shiftingSolenoid.Set(false);    // low gear?
 
-                  /* If joystick button 5 pressed, use the joystick position */
-                  /* to adjust some variables to specific speeds, so we can  */
-                  /* set the drive motors to those speeds in later code.     */
-      if ( ( 0 == iCallCount%100 )  &&
-           sCurrState.joyButton[5]     ) {
+      motorFindMinMaxVelocitySpark( m_LSMasterEncoder, LSMotorState );
+      motorFindMinMaxVelocitySpark( m_RSMasterEncoder, RSMotorState );
 
-         if ( 0.5 < m_stick.GetY() &&
-              LSMotorState.targetVelocity_UnitsPer100ms < 790.0 * 4096 / 600 ) {
-            LSMotorState.targetVelocity_UnitsPer100ms += 200.0 * 4096 / 600;
-         } else if ( m_stick.GetY() < -0.5 &&
-                     -790.0 * 4096 / 600 <
-                                  LSMotorState.targetVelocity_UnitsPer100ms ) {
-            LSMotorState.targetVelocity_UnitsPer100ms -= 200.0 * 4096 / 600;
-         }
-
-         if ( 0.5 < m_stick.GetX() &&
-              RSMotorState.targetVelocity_UnitsPer100ms < 790.0 * 4096 / 600 ) {
-            RSMotorState.targetVelocity_UnitsPer100ms += 200.0 * 4096 / 600;
-         } else if ( m_stick.GetX() < -0.5 && 
-                     -790.0 * 4096 / 600 <
-                                  RSMotorState.targetVelocity_UnitsPer100ms ) {
-            RSMotorState.targetVelocity_UnitsPer100ms -= 200.0 * 4096 / 600;
-         }
-      } 
-
-      motorFindMinMaxVelocity( m_motorLSMaster, LSMotorState );
-      motorFindMinMaxVelocity( m_motorRSMaster, RSMotorState );
-
-    if ( sCurrState.teleop ) {
-      if (sCurrState.joyButton[1]) { //when button 1 is pressed, shift into high gear until released
-         sCurrState.highGear = true;
-         m_shiftingSolenoid.Set( true );
-      } else if (!sCurrState.joyButton[1]) {
-         sCurrState.highGear = false;
-         m_shiftingSolenoid.Set( false );
-      }
-    } else {
-      if ( ( 15000 < abs(LSMotorState.sensorVmin) ) ||
-           ( 15000 < abs(RSMotorState.sensorVmin) )    ) {
-         if (!sCurrState.highGear){
-            cout << "shifting to high" << endl; 
-         }
-         sCurrState.highGear = true; // could move inside if statement
-         m_shiftingSolenoid.Set( true );  // high gear got 5700/5200
-      } else if ( ( abs(LSMotorState.sensorVmin) < 14000 ) &&
-                  ( abs(RSMotorState.sensorVmin) < 14000 )  ) {
-         if (sCurrState.highGear){
-            cout << "shifting to low" << endl;
-         }
-         sCurrState.highGear = false; // could move inside if statement
-         m_shiftingSolenoid.Set( false );    // low gear got 2800/2700
-      } 
-    } 
-
-      if ( 0 == iCallCount%100 )  {   // every 2 seconds
+      if ( 0 == iCallCount%1000 )  {   // every 20 seconds
          // JoystickDisplay();
+      } else if ( 1 == iCallCount%1000 )  {   // every 20 seconds
+           MotorDisplaySpark( "LS:", m_motorLSMaster, 
+                              m_LSMasterEncoder, LSMotorState );
+      } else if ( 2 == iCallCount%1000 )  {   // every 20 seconds
+           MotorDisplaySpark( "RS:", m_motorRSMaster,
+                              m_RSMasterEncoder, RSMotorState );
+      } else if ( 3 == iCallCount%1000 )  {   // every 20 seconds
+         IMUOrientationDisplay();
 
-//         MotorDisplay( "LS:", m_motorLSMaster, LSMotorState );
-//         MotorDisplay( "RS:", m_motorRSMaster, RSMotorState );
-         //IMUOrientationDisplay();
-
-         // max free speed for MinCims is about 6200
+         // max free speed for MiniCims is about 6200
          //cout << "Accel: x/y/z: " << RoborioAccel.GetX() << "/";
          //cout << RoborioAccel.GetY() << "/";
          //cout << RoborioAccel.GetZ() << endl;
+      } else {
+         // cout << "yawrate: " << sCurrState.rateXYZ[2] << endl;
       }
 
-                                       /* Button 1 is the trigger button on */
-                                       /* the front of the joystick.        */
-                                       /* Button 2 is the bottom button on  */
-                                       /* the rear of the joystick.         */
-      if ( ( sCurrState.joyButton[2] ) &&      // If driver is pressing the
-           ( sCurrState.joyButton[1] ) &&      // "ReverseDrive" and the
-           ( 1  == limev )                ) {  // "DriveToLimelightTarget"
-                                 // buttons, and the limelight has a target,
+                                      /* Button 1 is the trigger button on  */
+                                      /* the front of the joystick.         */
+                                      /* (drive to target; either powercell */
+                                      /* or limelight target)               */
+                                      /* Button 2 is the bottom button on   */
+                                      /* the rear of the joystick.          */
+                                      /* (drive in reverse direction).      */
+
+                                       // If driver is pressing button one
+                                       // ("trigger: drive-to-a-target")
+                                       // but not button 2
+                                       // ("drive in reverse direction),
+                                       // and a powercell is visible
+      if ( ( BUTTON_TARGET ) && ( !BUTTON_REVERSE ) &&
+           ( powercellOnVideo.SeenByCamera ) ) { 
+
+         DriveToPowercell();  // then autonomously drive towards the powercell
+
+                                       // If driver is pressing button one
+                                       // ("trigger: drive-to-a-target")
+                                       // AND button 2
+                                       // ("drive in reverse direction),
+                                       // and the limelight sees a target
+      } else if ( BUTTON_TARGET && BUTTON_REVERSE &&
+                  ( 1  == limev )                ) {
                                  // then autonomously drive towards the target
          DriveToLimelightTarget();
 
-                                           // If driver is pressing button four
-      } else if ( ( sCurrState.joyButton[4] ) &&
-                  ( powercellOnVideo.SeenByCamera ) ) { 
-                              // trigger ("DriveToPowercell"), and
-                              // the USB videocamera has seen a powercell,
-         DriveToPowercell();  // then autonomously drive towards the powercell
+               // If the console button 12 (the leftmost missile switch) is on
+      } else if ( BUTTON_CARTESIANDRIVE ) {
+                       // Then drive by cartesian coordinates (field oriented)
+         DriveCartesianByJoystick();
 
-                                        /* Button 3 is the topmost center   */
-                                        /* button on the back of joystick.  */
-      } else if ( sCurrState.joyButton[3] ) {
-
-                     /* If button 3 pressed, drive the motors separately    */
-                     /* (rather than with ArcadeDrive) with Percent Output, */
-                     /* using the variables that have been set with the     */
-                     /* joystick while button 3 is pressed.                 */
-         if ( !sPrevState.joyButton[3] ) {  // if button has just been pressed
-            // m_drive.StopMotor();
-                                // Set current sensor positions to zero
-            m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-            m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-         }
-         // m_motorLSMaster.Set( ControlMode::PercentOutput,
-         //                      -m_stick.GetY() );
-         // m_motorRSMaster.Set( ControlMode::PercentOutput,
-         //                      -m_stick.GetX() );
-                        /* Use MotionMagic to set the position of the drive */
-                        /* wheels, rather than setting their velocity.      */
-         // m_motorLSMaster.Set( ControlMode::MotionMagic, sCurrState.joyY*4096 );
-         // m_motorRSMaster.Set( ControlMode::MotionMagic, sCurrState.joyX*4096 );
-
-                                      /* Button 5 is the Right-most button  */
-                                      /* on the back of the joystick.       */
-      } else if ( sCurrState.joyButton[5] ) {
-         static int iButtonPressCallCount = 0;
-         if ( !sPrevState.joyButton[5] ) {  // if button has just been pressed
-            // m_drive.StopMotor();
-            iButtonPressCallCount = 0;
-         }
-         // m_drive.StopMotor();    // this is needed to eliminate motor warnings
-
-         if ( iButtonPressCallCount < 50 ) {       // turn motors on gently...
-            // m_motorLSMaster.Set( ControlMode::Velocity,
-            //       m_motorLSMaster.GetSelectedSensorVelocity() +
-            //          0.2 * ( LSMotorState.targetVelocity_UnitsPer100ms -
-            //                  m_motorLSMaster.GetSelectedSensorVelocity() ) );
-            // m_motorRSMaster.Set( ControlMode::Velocity,
-            //       m_motorRSMaster.GetSelectedSensorVelocity() +
-            //          0.2 * ( RSMotorState.targetVelocity_UnitsPer100ms -
-            //                  m_motorRSMaster.GetSelectedSensorVelocity() ) );
-         } else {
-            // m_motorLSMaster.Set( ControlMode::Velocity, 
-            //                        LSMotorState.targetVelocity_UnitsPer100ms);
-            // m_motorRSMaster.Set( ControlMode::Velocity, 
-            //                        RSMotorState.targetVelocity_UnitsPer100ms);
-         }
-         iButtonPressCallCount++;
-      } else {
-                                    /* Drive the robot according to the     */
-                                    /* commanded Y and X joystick position. */
-         DriveByJoystick();
+      } else {  // else no buttons pressed
+                             /* Drive the robot according to the            */
+         DriveByJoystick();  /* commanded Y and X joystick position.        */
+                             /* This function is only called in             */
+                             /* teleop mode, so no need to insert data into */
+                             /* the joyY and joyX variables.                */
       }
       return true;
    }      // RunDriveMotors()
@@ -1174,6 +1660,7 @@ class Robot : public frc::TimedRobot {
       /* TurnToHeading()                                                     */
       /* This function turns the robot to a specified heading.               */
       /* heading is a parameter, in the same degree units as the Pigeon IMU  */
+      /* (or ADIS16470) IMU                                                  */
       /* produces; it is positive for left turns (the same as trigonometry,  */
       /* but the opposite of ordinary 0-360 degree compass directions).      */
       /* bInit is a boolean that tells the function to initialize (to record */
@@ -1181,73 +1668,17 @@ class Robot : public frc::TimedRobot {
       /* This function returns false if the yaw value has not been reached   */
       /* yet, and returns true when the yaw has been reached.                */
       /*---------------------------------------------------------------------*/
-   bool OldTurnToHeading ( double heading ) {
-      static bool bReturnValue = true;
-      static double startYaw = 0;
-
-      if ( bReturnValue ) {
-         startYaw = sCurrState.yawPitchRoll[0];
-	 cout << "TurnToHeading(): startYaw = " << startYaw << endl;
-      }
-
-      if ( sCurrState.yawPitchRoll[0] < heading ) { // do we need to turn left?
-                                                // If we have a long way to go,  
-         if ( sCurrState.yawPitchRoll[0] < heading-50.0 ) {   // turn left fast
-            if ( sCurrState.yawPitchRoll[0]-50 <startYaw){
-               LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
-               //LSMotorState.targetVelocity_UnitsPer100ms = 0.0;
-               RSMotorState.targetVelocity_UnitsPer100ms = 300.0 * 4096 / 600;
-            } else {
-               LSMotorState.targetVelocity_UnitsPer100ms = 300.0 * 4096 / 600;
-               RSMotorState.targetVelocity_UnitsPer100ms = 300.0 * 4096 / 600;
-            }
-            bReturnValue = false;           // else if a medium way to go, turn
-         } else if ( sCurrState.yawPitchRoll[0] < heading-5.0 ) {  // left slow
-            LSMotorState.targetVelocity_UnitsPer100ms = 300.0 * 4096 / 600 *
-		                   (heading - sCurrState.yawPitchRoll[0])/50.0;
-            //LSMotorState.targetVelocity_UnitsPer100ms = 0.0;
-            RSMotorState.targetVelocity_UnitsPer100ms = 300.0 * 4096 / 600 *
-		                   (heading - sCurrState.yawPitchRoll[0])/50.0;
-            bReturnValue = false;
-         } else {                              // else we're done; stop turning
-            LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
-            RSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;  
-            bReturnValue = true; 
-         }
-      } else {                                    // else we need to turn right
-                                                // If we have a long way to go,
-         if ( heading+50.0 < sCurrState.yawPitchRoll[0] ) {  // turn right fast
-            LSMotorState.targetVelocity_UnitsPer100ms = -300.0 * 4096 / 600;
-            //RSMotorState.targetVelocity_UnitsPer100ms = -500.0 * 4096 / 600;
-            RSMotorState.targetVelocity_UnitsPer100ms = 0.0;
-            bReturnValue = false;
-                                            // else if a medium way to go, turn
-         }else if ( heading+5.0 < sCurrState.yawPitchRoll[0] ) {  // right slow
-            LSMotorState.targetVelocity_UnitsPer100ms = -300.0 * 4096 / 600 *
-		                     (sCurrState.yawPitchRoll[0]-heading)/50.0;
-            RSMotorState.targetVelocity_UnitsPer100ms = -100.0 * 4096 / 600 *
-		                     (sCurrState.yawPitchRoll[0]-heading)/50.0;
-            //RSMotorState.targetVelocity_UnitsPer100ms = 0.0;
-            bReturnValue = false;
-         } else {                              // else we're done; stop turning
-            LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
-            RSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
-            bReturnValue = true;
-         }
-      }
-      if ( bReturnValue ) {
-         cout << "TurnToHeading() returning TRUE!!!!!!!!!" << endl;
-      }
-      return bReturnValue;
-   }      // OldTurnToHeading()
-
-
    bool TurnToHeading ( double desiredYaw, bool bInit ) {
       static bool   bReturnValue = true;
       static double startYaw = 0;
+      static double dEventualYawPosition = 0;
 
-      double      currentYaw = sCurrState.yawPitchRoll[0];
-      double      prevYaw    = sPrevState.yawPitchRoll[0];
+      // double      currentYaw = sCurrState.yawPitchRoll[0];
+      // double      prevYaw    = sPrevState.yawPitchRoll[0];
+      double      currentYaw = sCurrState.yawPosnEstimate;
+#ifdef JAG_NOTDEFINED
+      double      prevYaw    = sPrevState.yawPosnEstimate;
+#endif
 
       static double dDesiredSpeed = 0.01; // -1.0 to +1.0, positive is forward
       static double dDesiredTurn = 0.0;  // -1.0 to +1.0, positive to the right
@@ -1260,9 +1691,19 @@ class Robot : public frc::TimedRobot {
          cout << "TurnToHeading(): startYaw = " << startYaw;
          cout << " desiredYaw = " << desiredYaw << endl;
       }
-        // calculate desired turn speed, with 100% if off by 50 degrees or more
-      dDesiredTurn = ( currentYaw-desiredYaw ) * 1.0/50.0;
+                 // Calculate the Yaw Position we'd arrive at (when we came to
+                 // a stop) if we simply decelerated our turn rate at
+                 // 1000.0 degrees/sec/sec, starting right now.
+                 // This is conservative; I have measured EZ-PZ angular
+                 // acceleration rate at about 2500 deg/sec/sec.
+                 // (max yaw rate is about 500 deg/sec).
+      dEventualYawPosition = currentYaw + 0.5 * sCurrState.yawRateEstimate *
+                                      abs(sCurrState.yawRateEstimate) / 1000.0;
+             // Since we now account for yaw rate in deciding when to end the
+             // turn, we can be more aggressive in starting the turn:
+      dDesiredTurn = ( dEventualYawPosition - desiredYaw ) * 1.0/25.0;
 
+#ifdef JAG_NOTDEFINED
                        // If we're turning at less than 50 degrees per second,
       if ( std::abs( currentYaw - prevYaw ) < 1.0 ) {
            // Increase the forward speed, to reduce friction and ease the turn.
@@ -1271,10 +1712,13 @@ class Robot : public frc::TimedRobot {
                               // reduce the forward speed, to tighten the turn.
          dDesiredSpeed = std::max( 0.01, dDesiredSpeed * 0.9 );
       }
+#else
+      dDesiredSpeed = 0.0;
+#endif
 
       if ( startYaw < desiredYaw ) {                // Do we need to turn left?
-	                                  // dDesiredTurn is left negative, but
-                            	          // *Yaw variables are left positive.
+                                          // dDesiredTurn is left negative, but
+                                          // *Yaw variables are left positive.
          if ( currentYaw < desiredYaw-5.0 ) {        // Should we keep turning?
             bReturnValue = false;
          } else {                              // else we're done; stop turning
@@ -1290,10 +1734,6 @@ class Robot : public frc::TimedRobot {
             bReturnValue = true;
          }
       }
-      dDesiredSpeed = std::min(  1.0, dDesiredSpeed );
-      dDesiredTurn  = std::min(  1.0, dDesiredTurn  );
-      dDesiredSpeed = std::max( -1.0, dDesiredSpeed );
-      dDesiredTurn  = std::max( -1.0, dDesiredTurn  );
 
 //    cout << "Turn2Hdg(): " << dDesiredSpeed << ", " << dDesiredTurn << endl;
       Team4918Drive( dDesiredSpeed, dDesiredTurn );
@@ -1306,15 +1746,17 @@ class Robot : public frc::TimedRobot {
       return bReturnValue;
    }      // TurnToHeading()
 
-
       /*---------------------------------------------------------------------*/
       /* DriveToDistance()                                                   */
       /* This function drives the robot on a specified heading,              */
       /* to a specified distance.                                            */
       /* desiredYaw is a parameter, in the same degree units as the Pigeon   */
+      /*    (or ADIS16470)                                                   */
       /*    IMU produces; it is positive for left turns (the same as         */
       /*    trigonometry, but the opposite of ordinary 0-360 degree compass  */
-      /*    directions).                                                     */
+      /*    directions).  It is also an absolute angle, relative to the      */
+      /*    direction the robot was facing when first powered up; it is not  */
+      /*    limited to the normal 0-360 degree range.                        */
       /* desiredDistance is a parameter, in feet; positive is in the         */
       /*    "forward" direction (toward the powercell-sucking side of        */
       /*    the robot).                                                      */
@@ -1325,75 +1767,53 @@ class Robot : public frc::TimedRobot {
       /*    the current position as the starting position).                  */
       /* This function returns false if the distance has not been reached    */
       /* yet, and returns true when the distance has been reached.           */
+      /* It also returns true if it has been told to drive toward a          */
+      /* powercell (bDivertToPowercell is true) and a powercell is in the    */
+      /* intake ( sCurrState.powercellInIntake is true ).                    */
       /*---------------------------------------------------------------------*/
    bool DriveToDistance( double desiredYaw,
                          double desiredDistance,
                          bool   bDivertToPowercell,
                          bool   bInit            ) {
       static bool bReturnValue = true;
- //     static int  iLSStartPosition = 0;
- //     static int  iRSStartPosition = 0;
-      static int  iTotalTicksHighGear = 0;
-      static int  iTotalTicksLowGear  = 0;
-      static int  iLSPrevPosition = 0;
-      static int  iRSPrevPosition = 0;
-      int         iDistanceDriven;    // distance driven in encoder ticks
+      static double dTotalRotations = 0.0;
+      static double dLSPrevPosition = 0.0;
+      static double dRSPrevPosition = 0.0;
+      double      dDistanceDrivenRaw; // distance driven in motor rotations
       double      dDistanceDriven;    // distance driven in feet (floating pt.)
       double      dDesiredSpeed;  // -1.0 to +1.0, positive is forward
       double      dDesiredTurn;   // -1.0 to +1.0, positive is to the right
+      static double dEventualYawPosition = 0;
       static int  iCallCount = 0;
       iCallCount++;
 
           // If we've been told to initialize, or the last call returned
           // true (indicating that we finished the previous drive to distance).
       if ( bInit || bReturnValue ) {
-//         iLSStartPosition = sCurrState.iLSMasterPosition;
-//         iRSStartPosition = sCurrState.iRSMasterPosition;
-         iLSPrevPosition = sCurrState.iLSMasterPosition;
-         iRSPrevPosition = sCurrState.iRSMasterPosition;
-	 iTotalTicksHighGear = 0;
-	 iTotalTicksLowGear  = 0;
+         dLSPrevPosition = sCurrState.dLSMasterPosition;
+         dRSPrevPosition = sCurrState.dRSMasterPosition;
+         dTotalRotations = 0.0;
       }
-      iDistanceDriven =
-                   ( - ( sCurrState.iLSMasterPosition - iLSPrevPosition ) +
-                     ( sCurrState.iRSMasterPosition - iRSPrevPosition ) ) / 2;
-      if ( sCurrState.highGear ) {
-         iTotalTicksHighGear += iDistanceDriven;
-      } else {
-         iTotalTicksLowGear += iDistanceDriven;
-      }
+      dDistanceDrivenRaw =
+                   ( - ( sCurrState.dLSMasterPosition - dLSPrevPosition ) +
+                     ( sCurrState.dRSMasterPosition - dRSPrevPosition ) ) / 2;
+      dTotalRotations += dDistanceDrivenRaw;
 
-            // Convert encoder ticks to feet, using the diameter of the wheels,
-            // the number of ticks/revolution, and the number of inches/foot.
+            // Convert motor rotations to feet, using diameter of the wheels
+            // and the number of inches/foot.
             // Also have to adjust for gear ratio, since the encoders are on 
             // the motors, before the gearbox, and we need the rotation of the
-	    // wheels, after the gearbox.
-	    // Apply the ticks separately, depending on whether they occurred
-	    // when in low or high gear.
+            // wheels, after the gearbox.
 
-// NOTE: The gear ratio values below are guesses; the actual values should be
-// one of these pairs, based on which gearbox the team built into the robot
-// (which shifter-spread, and which 3rd-stage gear pair).
-// See https://www.vexrobotics.com/3cimballshifter.html#fh28wu4 :
-//
-//            2.16x Shifter Spread  2.65x Shifter Spread  3.68x Shifter Spread
-//            High Gear  Low Gear   High Gear  Low Gear   High Gear  Low Gear 
-// 3rd Stage  Overall    Overall    Overall    Overall    Overall    Overall
-// Gear Pair  Reduction  Reduction  Reduction  Reduction  Reduction  Reduction
-// 64 to 20    9.07 : 1  19.61 : 1   9.07 : 1  24.00 : 1   9.07 : 1  33.33 : 1
-// 60 to 24    7.08 : 1  15.32 : 1   7.08 : 1  18.75 : 1   7.08 : 1  26.04 : 1
-// 54 to 30    5.10 : 1  11.03 : 1   5.10 : 1  13.50 : 1   5.10 : 1  18.75 : 1
-// 50 to 34    4.17 : 1   9.01 : 1   4.17 : 1  11.03 : 1   4.17 : 1  15.32 : 1
-// NO 3rd      2.83 : 1   6.13 : 1   2.83 : 1   7.50 : 1   2.83 : 1  10.42 : 1
-//   Stage
-//
-// Measurements with the actual robot indicate that 13.50 is the best ratio,
-// and that seems to be true whether we are in high gear or low gear --
-// so the encoders in the gearbox must be after the high/low change.
+            // The drivetrain in this robot has 2 Rev Robotics Neo motors
+            // on each side, each with a 10.71:1 gear ratio.  So estimates
+            // of the robot wheel performance at full motor power;
+            //            529 RPM output at max motor speed,
+            //             41.08 foot-pounds output at motor stall with 2 Neos
+            //             13.88 feet/second with 6" wheels
+            //            328.   pounds of driving force (all 4 Neos)
 
-      dDistanceDriven = 3.1415 * 8.0 / 4096.0 / 12.0 *
-                        ( (double)iTotalTicksHighGear / 13.50 +
-                          (double)iTotalTicksLowGear  / 13.50   );
+      dDistanceDriven = dTotalRotations * ( 3.1415 * 6.0 / 10.71 / 12.0 );
 
                                          // if we haven't driven far enough yet
       if ( std::abs( dDistanceDriven ) < std::abs( desiredDistance ) ) {
@@ -1404,7 +1824,7 @@ class Robot : public frc::TimedRobot {
             } else {
                    // Otherwise speed is proportional to distance still needed.
                dDesiredSpeed = 0.5 +
-		                  ( desiredDistance - dDistanceDriven ) / 10.0;
+                                  ( desiredDistance - dDistanceDriven ) / 10.0;
             }
          } else {                               // else we're driving backwards
                                       // and still have more than 10 feet to go
@@ -1416,32 +1836,29 @@ class Robot : public frc::TimedRobot {
                                   ( desiredDistance - dDistanceDriven ) / 10.0;
             }
          }
-                     // if more than 50 degrees to the right of desired course
-         if ( sCurrState.yawPitchRoll[0] < desiredYaw-50.0 ) {
-            dDesiredTurn = -0.2;                         // turn left strongly
-                 // else if more than 50 degrees to the left of desired course
-         } else if ( desiredYaw+50.0 < sCurrState.yawPitchRoll[0] ) {
-            dDesiredTurn = 0.2;                         // turn right strongly
-         } else {
-                     // else calculate turn amount based on how far off we are
-            dDesiredTurn = (sCurrState.yawPitchRoll[0]-desiredYaw) * 0.2/50.0;
-            if ( ( 0.02 < dDesiredTurn ) && ( dDesiredTurn ) < 0.1 ) {
-               dDesiredTurn = 0.1;
-            } else if ( ( -0.1 < dDesiredTurn ) && ( dDesiredTurn < -0.02 ) ) {
-               dDesiredTurn = -0.1;
-            }
-         }
+                 // Calculate the Yaw Position we'd arrive at (when we came to
+                 // a stop) if we simply decelerated our turn rate at
+                 // 1000.0 degrees/sec/sec, starting right now.
+                 // This is conservative; I have measured EZ-PZ angular
+                 // acceleration rate at about 2500 deg/sec/sec.
+                 // (max yaw rate is about 500 deg/sec).
+         dEventualYawPosition = sCurrState.yawPosnEstimate +
+                                      0.5 * sCurrState.yawRateEstimate *
+                                      abs(sCurrState.yawRateEstimate) / 1000.0;
+             // Since we now account for yaw rate in deciding when to end the
+             // turn, we can be more aggressive in starting the turn:
+         dDesiredTurn = ( dEventualYawPosition - desiredYaw ) * 1.0/50.0;
          
-	 if ( !bDivertToPowercell ) { // if we are ignoring powercells (we've
-		                      // been told NOT to divert to powercells)
+         if ( !bDivertToPowercell ) { // if we are ignoring powercells (we've
+                                      // been told NOT to divert to powercells)
             // then just drive (don't change dDesiredxxx values)
 
                     // else (we've been told to divert to powercells when seen)
                     // if a powercell is seen
-	 } else if ( powercellOnVideo.SeenByCamera ) {
+         } else if ( powercellOnVideo.SeenByCamera ) {
                  // Then drive toward the powercell, by setting dDesiredSpeed
                  // and dDesiredTurn, based on the X,Y coordinates of the
-		 // powercell in the camera view.
+                 // powercell in the camera view.
                  // powercellOnVideo.Y is the Y-position in the video frame of
                  // the powercell; the range is from -120 to +120 (pixels).
                  // powercellOnVideo.X is the X-position in the video frame of
@@ -1449,16 +1866,13 @@ class Robot : public frc::TimedRobot {
                  // (0,0) is right in the center of the field of view, with
                  // X increasing to the right, and Y increasing down towards
                  // the robot.
-		 // We could use a little math to make the turns a little 
-		 // sharper when the X offset is small, or when the powercell
+                 // We could use a little math to make the turns a little 
+                 // sharper when the X offset is small, or when the powercell
                  // is very close to the robot (Y is large).
 
                                     // The speed should be between 0.1 and 0.3
             dDesiredSpeed = std::min( (120.0 - powercellOnVideo.Y) / 100.0,
-			              0.3 );
-	    if ( 0.5 < dDesiredSpeed ) {
-               dDesiredSpeed = 0.5;
-            }
+                                      0.3 );
                                     // The turn should be between -0.5 and 0.5
             if        ( 5 <= powercellOnVideo.X ) {
                // dDesiredTurn = sqrt(powercellOnVideo.X/300.0) );
@@ -1469,33 +1883,40 @@ class Robot : public frc::TimedRobot {
             } else {
                dDesiredTurn = 0.0;
             }
-
-	 } else {         // else (we'd divert to a powercell if there was one,
+         } else {         // else (we'd divert to a powercell if there was one,
                           // but no powercell is currently in view)
             // then just drive (don't change dDesiredxxx values)
-	    dDesiredSpeed = dDesiredSpeed/4;
-	    dDesiredTurn = dDesiredTurn/4;
-	 }
+            dDesiredSpeed = dDesiredSpeed/4;
+            dDesiredTurn  = dDesiredTurn/4;
+         }
 
-         Team4918Drive( dDesiredSpeed, dDesiredTurn );    // then just drive
-	 if ( bDivertToPowercell && sCurrState.powercellInIntake ) {
-            bReturnValue = true;   // tell caller we are done
-	 } else{
-            bReturnValue = false;   // tell caller we are still driving
-	 }
+            // If we've been told to drive to a powercell, and we now have one
+         if ( bDivertToPowercell && sCurrState.powercellInIntake ) {
+            dDesiredSpeed = 0.0;                              // stop the robot
+            dDesiredTurn  = 0.0;
+//            m_motorLSMaster.SetIntegralAccumulator( 0.0 );
+//            m_motorRSMaster.SetIntegralAccumulator( 0.0 );
+            cout << "D2D() has a powercell!" << endl;
+            bReturnValue = true;                    // tell caller we are done
+         } else{
+            bReturnValue = false;          // tell caller we are still driving
+         }
+
+         Team4918Drive( dDesiredSpeed, dDesiredTurn );      // then just drive
+
          if ( 0 == iCallCount%100 ) {                        // Every 2 seconds
             cout << "D2D(): curYaw/desYaw desTurn: " <<
                     sCurrState.yawPitchRoll[0] << 
                     "/" << desiredYaw << " " <<
                     " " << dDesiredTurn << endl;
             cout << "dDistanceDriven: " << dDistanceDriven <<
-                    sCurrState.iLSMasterPosition <<
-                    sCurrState.iRSMasterPosition << endl;
+                    sCurrState.dLSMasterPosition <<
+                    sCurrState.dRSMasterPosition << endl;
          }
-      } else {
-         Team4918Drive( 0.0, 0.0 );   // stop the robot
-         m_motorLSMaster.SetIntegralAccumulator( 0.0 );
-         m_motorRSMaster.SetIntegralAccumulator( 0.0 );
+      } else {   // else we *have* driven far enough now
+         Team4918Drive( 0.0, 0.0 );                          // stop the robot
+//       m_motorLSMaster.SetIntegralAccumulator( 0.0 );
+//       m_motorRSMaster.SetIntegralAccumulator( 0.0 );
          bReturnValue = true;    // tell caller we've reached desired distance
       }
 
@@ -1505,16 +1926,33 @@ class Robot : public frc::TimedRobot {
          cout << " Final Yaw: " <<  sCurrState.yawPitchRoll[0] << endl;
       }
 
-      iLSPrevPosition = sCurrState.iLSMasterPosition;
-      iRSPrevPosition = sCurrState.iRSMasterPosition;
+      dLSPrevPosition = sCurrState.dLSMasterPosition;
+      dRSPrevPosition = sCurrState.dRSMasterPosition;
 
       return bReturnValue;
    }  // DriveToDistance()
 
+
       //create FollowWall function
+      /*---------------------------------------------------------------------*/
+      /* FollowWall()                                                        */
+      /* This function drives the robot along a wall.                        */
+      /*   distLeft is a distance in inches to the left-side wall.           */
+      /*   distRight is a distance in inches to the right-side wall; it is   */
+      /*             only used if distLeft is zero (or less than 6 inches).  */
+      /*   straight is a heading angle to drive when the wall is exactly     */
+      /*            the specified distance away.                             */
+      /*   turnTo is a heading angle to drive when the wall is too far away. */
+      /*   turnAway is a heading angle to drive when the wall is too close.  */
+      /* All heading angles are relative to the direction the robot was      */
+      /* facing when first powered up.                                       */
+      /* Generally: straight should be set to the heading along the wall,    */
+      /*            and turnTo and turnAway should be set to 30-40 degrees   */
+      /*            towards or away from the wall.                           */
+      /*---------------------------------------------------------------------*/
 
    void FollowWall( double distLeft, double distRight,
-		    double straight, double turnTo, double turnAway ) {
+                    double straight, double turnTo, double turnAway ) {
       double      wallDistance;
       double      currentYaw = sCurrState.yawPitchRoll[0];
       // double      prevYaw    = sPrevState.yawPitchRoll[0];
@@ -1551,15 +1989,17 @@ class Robot : public frc::TimedRobot {
        }  
    }  // FollowWall()
 
+
          /*------------------------------------------------------------------*/
          /* RunShooter()                                                     */
          /* RunShooter() drives the 2 shooter motors.                        */
          /*------------------------------------------------------------------*/
    bool RunShooter(void) {
+           //02/04/2022 max speed 3600
       if (   ( 0.5 < sCurrState.conY ) &&           // if console "joystick" is
             !( 0.5 < sPrevState.conY ) ) {          // newly-pressed downward
-         TSMotorState.targetVelocity_UnitsPer100ms =  2100 * 4096 / 600;
-         BSMotorState.targetVelocity_UnitsPer100ms = -2900 * 4096 / 600;
+         TSMotorState.targetVelocity_UnitsPer100ms =  1000 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =  1000 * 4096 / 600;
          m_motorTopShooter.Set( ControlMode::Velocity, 
                                 TSMotorState.targetVelocity_UnitsPer100ms );
          m_motorBotShooter.Set( ControlMode::Velocity, 
@@ -1577,8 +2017,8 @@ class Robot : public frc::TimedRobot {
                   !( sPrevState.conY < -0.5 ) ) { // is newly-pressed upward
          //TSMotorState.targetVelocity_UnitsPer100ms =  2200 * 4096 / 600;
          //BSMotorState.targetVelocity_UnitsPer100ms = -3000 * 4096 / 600;
-         TSMotorState.targetVelocity_UnitsPer100ms =  2000 * 4096 / 600;
-         BSMotorState.targetVelocity_UnitsPer100ms = -3000 * 4096 / 600;
+         TSMotorState.targetVelocity_UnitsPer100ms =  3000 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =  3000 * 4096 / 600;
          m_motorTopShooter.Set( ControlMode::Velocity, 
                                 TSMotorState.targetVelocity_UnitsPer100ms );
          m_motorBotShooter.Set( ControlMode::Velocity, 
@@ -1595,12 +2035,14 @@ class Robot : public frc::TimedRobot {
                when console "joystick" is pushed in the positive direction ***/
       else if ( ( sCurrState.conX > 0.5 ) &&  //newly pressed rightward
                !( sPrevState.conX > 0.5 ) ) {
-         TSMotorState.targetVelocity_UnitsPer100ms =   100 * 4096 / 600;
-         BSMotorState.targetVelocity_UnitsPer100ms = -4300 * 4096 / 600;
-         m_motorTopShooter.Set( ControlMode::Velocity, 
-                                TSMotorState.targetVelocity_UnitsPer100ms );
-         m_motorBotShooter.Set( ControlMode::Velocity, 
-                                BSMotorState.targetVelocity_UnitsPer100ms );
+         TSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
+//       m_motorTopShooter.Set( ControlMode::Velocity, 
+//                              TSMotorState.targetVelocity_UnitsPer100ms );
+//       m_motorBotShooter.Set( ControlMode::Velocity, 
+//                              BSMotorState.targetVelocity_UnitsPer100ms );
+         m_motorTopShooter.Set( ControlMode::PercentOutput, 0.5 );  // test
+         m_motorBotShooter.Set( ControlMode::PercentOutput, 0.5 );  // test
       } else if ( !( sCurrState.conX < 0.5 ) && //newly released rightward
                    ( sPrevState.conX < 0.5 ) ) {
          TSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
@@ -1622,10 +2064,12 @@ class Robot : public frc::TimedRobot {
          m_motorBotShooter.Set(ControlMode::Velocity,
                0.95 * (double)m_motorBotShooter.GetSelectedSensorVelocity() );
       } 
-      if ( 0 == iCallCount%100 )  {   // every 2 seconds
-         if ( ( 100.0 < abs(m_motorTopShooter.GetSelectedSensorVelocity()) ) ||
-              ( 100.0 < abs(m_motorBotShooter.GetSelectedSensorVelocity()) ) ) {
+      if ( 0 == iCallCount%100 )  {   // every 2 seconds (at 2.00)
+         if ( 100.0 < abs(m_motorTopShooter.GetSelectedSensorVelocity()) ) {
             MotorDisplay( "TS:", m_motorTopShooter, TSMotorState );
+         }
+      } else if ( 1 == iCallCount%100 )  {   // every 2 seconds (at 2.02)
+         if ( 100.0 < abs(m_motorBotShooter.GetSelectedSensorVelocity()) ) {
             MotorDisplay( "BS:", m_motorBotShooter, BSMotorState );
          }
       }
@@ -1640,39 +2084,39 @@ class Robot : public frc::TimedRobot {
          /* speed, then moves the conveyor to shoot powercells.              */
          /*------------------------------------------------------------------*/
    void Shoot( void ) {
-      if ( 0.5 < sCurrState.conY ) {
-   	 // if ( ( 1800 * 4096 / 600 <
-   	 if ( ( 1800 * 4096 / 600 <
+      if ( 0.5 < sCurrState.conY ) {             // if Y-stick pulled backward
+         // if ( ( 1800 * 4096 / 600 <
+         if ( (  800 * 4096 / 600 <
                    abs( m_motorTopShooter.GetSelectedSensorVelocity() ) ) &&
          //   ( 2600 * 4096 / 600 <
-              ( 2600 * 4096 / 600 <
+              (  950 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
-	                                 // run the conveyor to shoot the balls
-	    sCurrState.iConveyPercent = -80;
+                                         // run the conveyor to shoot the balls
+            sCurrState.iConveyPercent = -80;
             m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
          }
-      } else if (sCurrState.conY < -0.5) {
+      } else if (sCurrState.conY < -0.5) {        // if Y-stick pushed forward
          // if ( ( 1900 * 4096 / 600 <
-         if ( ( 1800 * 4096 / 600 <
+         if ( ( 2400 * 4096 / 600 <
                    abs( m_motorTopShooter.GetSelectedSensorVelocity() ) ) &&
          //   ( 2700 * 4096 / 600 <
-              ( 2800 * 4096 / 600 <
+              ( 2600 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
-	                                 // run the conveyor to shoot the balls
-	    sCurrState.iConveyPercent = -80;
+                                         // run the conveyor to shoot the balls
+            sCurrState.iConveyPercent = -80;
             m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
          }
-      } else if ( 0.5 < sCurrState.conX ) {
-         if ( ( 0 * 4096 / 600 <
+      } else if ( 0.5 < sCurrState.conX ) {  // If X-stick pushed to the right
+         if ( ( 750 * 4096 / 600 <
                    abs( m_motorTopShooter.GetSelectedSensorVelocity() ) ) &&
-              ( 4000 * 4096 / 600 <
+              ( 750 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
             sCurrState.iConveyPercent = -80;
             m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
          }
       }
-   }
+   }    // Shoot()
 
 
       /*---------------------------------------------------------------------*/
@@ -1698,49 +2142,58 @@ class Robot : public frc::TimedRobot {
             cout << "powercell NOT in position 5" << endl; 
          } 
       }
-      if ( sCurrState.conButton[11] ) {             // Is manual mode selected?
-         if ( sCurrState.conButton[2] )   {            // Run conveyor forward.
-	    sCurrState.iConveyPercent = -80;
+      if ( BUTTON_MANUALCONVEYOR ) {               // Is manual mode selected?
+                                 // If driver is pushing BOTH conveyor buttons
+         if ( BUTTON_CONVEYORFORWARD && BUTTON_CONVEYORBACKWARD ) {
+                   // Then run the conveyor according to the Joystick throttle
+            m_motorConveyMaster.Set( ControlMode::PercentOutput,
+                                     0.5*sCurrState.joyZ );
+            m_motorIntake.Set( ControlMode::PercentOutput,
+			       -0.4 * sCurrState.joyZ );
+	 } else if ( BUTTON_CONVEYORFORWARD )   {     // Run conveyor forward.
+            sCurrState.iConveyPercent = -80;
             m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
-         } else if ( sCurrState.conButton[4] ) {     // Run conveyor backwards.
-            sCurrState.iIntakePercent = 40;       // Run intake backwards, too.
-	    sCurrState.iConveyPercent =  80;
+         } else if ( BUTTON_CONVEYORBACKWARD ) {     // Run conveyor backward.
+            sCurrState.iConveyPercent =  80;
             m_motorConveyMaster.Set( ControlMode::PercentOutput,  0.8 );
+            sCurrState.iIntakePercent = -40;     // Run intake backwards, too.
+            m_motorIntake.Set( ControlMode::PercentOutput, -0.4 );
          } else {                                         // Stop the conveyor.
-	   sCurrState.iConveyPercent = 0;
-           if (sPrevState.conButton[2]||sPrevState.conButton[4]) {
+           sCurrState.iConveyPercent = 0;
+           if (BUTTON_CONVEYORFORWARD_PREV||BUTTON_CONVEYORBACKWARD_PREV) {
               m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.0);
-	   }
-         } 
-      } else {  
+           }
+         }
+      } else {
          if ( !(sCurrState.conX > 0.5) && !(sCurrState.conY > 0.5) && 
               !(sCurrState.conY < -0.5) ) {
             static int ConveyorCounter = 0;
             if ( sCurrState.powercellInIntake &&
               !sCurrState.powercellInPosition5 ) {
-	      sCurrState.iConveyPercent = -30;
+              sCurrState.iConveyPercent = -30;
               m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.3 );
-	      ConveyorCounter = 6;
+              ConveyorCounter = 6;
             } else if ( ( 0 < ConveyorCounter ) &&
                         !sCurrState.powercellInPosition5 ) {
-	      sCurrState.iConveyPercent = -30;
+              sCurrState.iConveyPercent = -30;
               m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.3 );
-	      ConveyorCounter--;
+              ConveyorCounter--;
             } else {
             //if (  sPrevState.powercellInIntake && 
             //     !sPrevState.powercellInPosition5 ) {
-	        sCurrState.iConveyPercent = 0;
+                sCurrState.iConveyPercent = 0;
                 m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.0 );
             // }
             } 
          }
       }
-//    if ( sPrevState.iConveyPercent != sCurrState.iConveyPercent ) {
-//       m_motorConveyMaster.Set( ControlMode::PercentOutput,
-//	                          (double)sCurrState.iConveyPercent / 100.0 );
-//    }
+      if ( sPrevState.iConveyPercent != sCurrState.iConveyPercent ) {
+         m_motorConveyMaster.Set( ControlMode::PercentOutput,
+                                  (double)sCurrState.iConveyPercent / 100.0 );
+      }
    }   // RunConveyor()
 
+#ifdef JAG_NOTDEFINED
       /*---------------------------------------------------------------------*/
       /* RunColorWheel()                                                     */
       /* Extend or retract the color wheel flipper.                          */
@@ -1750,8 +2203,9 @@ class Robot : public frc::TimedRobot {
       static bool bFlipperState = false;
       iCallCount++;
 
-                                 // Console button 6 is the lowest-left button
-      if ( !sPrevState.conButton[6] && sCurrState.conButton[6] ) {
+                              // If the "EXTEND Color Wheel" button is pressed
+                              // (Console button 6; the lowest-left button)
+      if ( !BUTTON_EXTENDCOLORWHEEL_PREV && BUTTON_EXTENDCOLORWHEEL ) {
          if ( bFlipperState ){
             m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kForward);
          } else {
@@ -1759,56 +2213,61 @@ class Robot : public frc::TimedRobot {
          }
          bFlipperState = !bFlipperState; 
       }
-      if ( sCurrState.conButton[7]){
+                              // If the "RUN Color Wheel" button is pressed
+                              // (Console button 7; the center-bottom button)
+      if ( BUTTON_RUNCOLORWHEEL ) {
          m_motorFlippyFlippy.Set(ControlMode::PercentOutput, 0.2);
       } else {
          m_motorFlippyFlippy.Set(ControlMode::PercentOutput, 0.0);
       }
    }
+#endif
 
       /*---------------------------------------------------------------------*/
       /* RunClimberPole()                                                    */
       /* Extend or retract the telescoping climber pole.                     */
       /*---------------------------------------------------------------------*/
-   void RunClimberPole( void ) {
+   void RunClimberPole( WPI_TalonSRX & m_motorClimberPole ) {
       static int iCallCount = 0;
-      static bool limitSwitchHasBeenHit = false;
+//    static bool limitSwitchHasBeenHit = false;
       iCallCount++;
 
-      if (sCurrState.conButton[1] && sCurrState.conButton[3] ) {
+                     // if BOTH climber buttons pressed, run the climber motor
+                     // according to the throttle (Z-Axis) on the joystick
+      if ( BUTTON_CLIMBERUP && BUTTON_CLIMBERDOWN ) {
          m_motorClimberPole.Set( ControlMode::PercentOutput,
                                  0.5*sCurrState.joyZ);
       
-      } else if ( sCurrState.conButton[1] ){
-         //if ( !sPrevState.conButton[1] ) {       // if button 1 has just been
+      } else if ( BUTTON_CLIMBERUP ){
+         //if ( !BUTTON_CLIMBERUP_PREV ) {       // if button 1 has just been
            // limitSwitchHasBeenHit = false;       // pressed, reset to start
            // m_compressor.Stop();
          //}
-         if ( limitSwitchHasBeenHit ) {
+//       if ( limitSwitchHasBeenHit ) {
                  // we are at the top; just supply a little power to stay there
-            m_motorClimberPole.Set( ControlMode::PercentOutput, 0.10 );
-         } else {
+//          m_motorClimberPole.Set( ControlMode::PercentOutput, 0.10 );
+//       } else {
                                                    // apply full climbing power
             m_motorClimberPole.Set( ControlMode::PercentOutput, 0.4 );
             if ( m_motorClimberPole.IsFwdLimitSwitchClosed() ) {
-               limitSwitchHasBeenHit = true;
+//             limitSwitchHasBeenHit = true;
             }
-         }
-      } else if (sCurrState.conButton[3] ) {
+//       }
+      } else if (BUTTON_CLIMBERDOWN ) {
          m_motorClimberPole.Set( ControlMode::PercentOutput, -0.05);
            
       } else { 
          // Else neither button is currently being pressed.  If either was
-	 // previously pressed, stop sending power to climber pole motor
-         if (sPrevState.conButton[1] || sPrevState.conButton[3] ) {
+         // previously pressed, stop sending power to climber pole motor
+         if ( BUTTON_CLIMBERUP_PREV || BUTTON_CLIMBERDOWN_PREV ) {
             m_motorClimberPole.Set( ControlMode::PercentOutput, 0.0);
          }
       }
       
 
       if ( 0 == iCallCount%103 ) { // every 2 seconds
-         if ( sCurrState.conButton[1] || sCurrState.conButton[3] ) {
-            if ( sCurrState.conButton[1] ) {
+         if ( BUTTON_CLIMBERUP || BUTTON_CLIMBERDOWN ) {
+            if ( BUTTON_CLIMBERUP ) {
                cout << "ClimberUp: ";
             } else {
                cout << "ClimberDown: ";
@@ -1825,6 +2284,7 @@ class Robot : public frc::TimedRobot {
    }      // RunClimberPole() 
 
 
+#ifdef JAG_NOTDEFINED
       /*---------------------------------------------------------------------*/
       /* RunClimberWinch()                                                   */
       /* Run the winch motor, to make the robot climb.                       */
@@ -1833,7 +2293,7 @@ class Robot : public frc::TimedRobot {
       static int iCallCount = 0;
       iCallCount++;
 
-      if ( sCurrState.conButton[9] ){
+      if ( BUTTON_RUNCLIMBWINCH ){
          m_motorClimberWinch.Set( ControlMode::PercentOutput, 0.5 );
          if ( 0 == iCallCount%50 ) {
             cout << "ClimberWinch Current: " << setw(5) <<
@@ -1843,13 +2303,100 @@ class Robot : public frc::TimedRobot {
          m_motorClimberWinch.Set( ControlMode::PercentOutput, 0.0 );
       }
    }      // RunClimberWinch()
+#endif
+
+
+      /*---------------------------------------------------------------------*/
+      /* MotorInitSpark()                                                    */
+      /* Setup the initial configuration of a Neo motor, driven by a         */
+      /* Spark Max controller.  These settings can be superseded after this  */
+      /* function is called, for the needs of each specific SparkMax-driven  */
+      /* motor.                                                              */
+      /*---------------------------------------------------------------------*/
+   void MotorInitSpark( rev::CANSparkMax             & m_motor,
+                        rev::SparkMaxPIDController   & m_motorPID,
+                        rev::SparkMaxRelativeEncoder & m_motorEncoder ) {
+
+      m_motor.RestoreFactoryDefaults( false );
+
+      m_motor.EnableSoftLimit( rev::CANSparkMax::SoftLimitDirection::kForward,
+                               false );
+      m_motor.EnableSoftLimit( rev::CANSparkMax::SoftLimitDirection::kReverse,
+                               false );
+         /*
+          * Configure Spark Max Output direction.
+          * Sensor (encoder) direction would be set by
+          * m_motorEncoder.SetInverted( true), but that doesn't work with
+          * hall-effect encoders like we have on our Neo drive motors.
+          */
+      m_motor.SetInverted( true );  // invert direction of motor itself.
+
+                        /* Set relevant frame periods to be at least as fast */
+                        /* as the periodic rate.                             */
+//      m_motor.SetStatusFramePeriod(
+//                         StatusFrameEnhanced::Status_13_Base_PIDF0,  10, 10 );
+//      m_motor.SetStatusFramePeriod(
+//                         StatusFrameEnhanced::Status_10_MotionMagic, 10, 10 );
+
+                                         /* Set the peak and nominal outputs */
+//      m_motor.ConfigNominalOutputForward( 0, 10 );
+//      m_motor.ConfigNominalOutputReverse( 0, 10 );
+//      m_motor.ConfigPeakOutputForward(    1, 10 );
+//      m_motor.ConfigPeakOutputReverse(   -1, 10 );
+
+            /* Set limits to how much current will be sent through the motor */
+#ifdef SAFETY_LIMITS
+                 // 10 Amps below 5000 RPM, above 5000 RPM it ramps from
+                 // 10 Amps down to  5 Amps at 5700 RPM
+		 // At this low current limit, the robot will be unable to
+		 // rotate-in-place on carpet.
+      m_motor.SetSmartCurrentLimit( 10,  5, 5000 );
+#else
+                 // 30 Amps below 5000 RPM, above 5000 RPM it ramps from
+                 // 30 Amps down to 10 Amps at 5700 RPM
+      m_motor.SetSmartCurrentLimit( 30, 10, 5000 );
+#endif
+
+                                          // Config 100% motor output to 12.0V
+      m_motor.EnableVoltageCompensation( 12.0 );
+
+                 /* Set Closed Loop PIDF gains in slot0 - see documentation */
+                                                    // if encoder is connected
+      m_motorPID.SetP(     DrivePIDkP );
+      m_motorPID.SetI(     DrivePIDkI );
+      m_motorPID.SetD(     DrivePIDkD );
+      m_motorPID.SetIZone( DrivePIDkIz );
+      m_motorPID.SetFF(    DrivePIDkFF );
+      m_motorPID.SetOutputRange( DrivePIDkMinOutput, DrivePIDkMaxOutput );
+#ifdef DISP_SMARTDASHBOARD
+           // display PID coefficients on the SmartDashboard
+      frc::SmartDashboard::PutNumber( "P Gain", DrivePIDkP );
+      frc::SmartDashboard::PutNumber( "I Gain", DrivePIDkI );
+      frc::SmartDashboard::PutNumber( "D Gain", DrivePIDkD );
+      frc::SmartDashboard::PutNumber( "I Zone", DrivePIDkIz );
+      frc::SmartDashboard::PutNumber( "Feed Forward", DrivePIDkFF );
+      frc::SmartDashboard::PutNumber( "Min Output", DrivePIDkMinOutput );
+      frc::SmartDashboard::PutNumber( "Max Output", DrivePIDkMaxOutput );
+#endif
+
+                /* Set acceleration and cruise velocity - see documentation */
+      m_motorPID.SetSmartMotionMaxVelocity( 5000, 0 );         // RPM
+      m_motorPID.SetSmartMotionMaxAccel(   5700, 0 );          // RPM/second
+
+               /* Set ramp rate (how fast motor accelerates or decelerates) */
+      m_motor.SetClosedLoopRampRate(0.1);
+      m_motor.SetOpenLoopRampRate(  0.1);
+
+      m_motor.SetIdleMode( rev::CANSparkMax::IdleMode::kCoast );
+
+   }      // MotorInitSpark()
 
 
       /*---------------------------------------------------------------------*/
       /* MotorInit()                                                         */
-      /* Setup the initial configuration of a motor.  These settings can be  */
-      /* superseded after this function is called, for the needs of each     */
-      /* specific motor.                                                     */
+      /* Setup the initial configuration of a motor driven by a Talon or     */
+      /* Victor motor controller.  These settings can be superseded after    */
+      /* this function is called, for the needs of each specific motor.      */
       /*---------------------------------------------------------------------*/
    void MotorInit( WPI_TalonSRX & m_motor ) {
 
@@ -1860,12 +2407,12 @@ class Robot : public frc::TimedRobot {
                                                    // if encoder is connected
       if ( OK == m_motor.ConfigSelectedFeedbackSensor(
                      FeedbackDevice::CTRE_MagEncoder_Relative, 0, 10 ) ) {
-         m_motor.ConfigForwardLimitSwitchSource(
-                     LimitSwitchSource::LimitSwitchSource_FeedbackConnector,
-                     LimitSwitchNormal::LimitSwitchNormal_NormallyOpen );
-         m_motor.ConfigReverseLimitSwitchSource(
-                     LimitSwitchSource::LimitSwitchSource_FeedbackConnector,
-                     LimitSwitchNormal::LimitSwitchNormal_NormallyOpen );
+//       m_motor.ConfigForwardLimitSwitchSource(
+//                   LimitSwitchSource::LimitSwitchSource_FeedbackConnector,
+//                   LimitSwitchNormal::LimitSwitchNormal_NormallyOpen );
+//       m_motor.ConfigReverseLimitSwitchSource(
+//                   LimitSwitchSource::LimitSwitchSource_FeedbackConnector,
+//                   LimitSwitchNormal::LimitSwitchNormal_NormallyOpen );
          m_motor.OverrideLimitSwitchesEnable(true);
       }
 
@@ -1877,7 +2424,7 @@ class Robot : public frc::TimedRobot {
           * (Green LED)
           */
       m_motor.SetSensorPhase(true);   // invert encoder value positive/negative
-      // m_motor.SetInverted(false);  // invert direction of motor itself.
+      m_motor.SetInverted(false);     // invert direction of motor itself.
 
                         /* Set relevant frame periods to be at least as fast */
                         /* as the periodic rate.                             */
@@ -1893,13 +2440,16 @@ class Robot : public frc::TimedRobot {
       m_motor.ConfigPeakOutputReverse(   -1, 10 );
 
             /* Set limits to how much current will be sent through the motor */
-      m_motor.ConfigPeakCurrentLimit(60);    // 60 works here for miniCIMs
       m_motor.ConfigPeakCurrentDuration(1);  // 1000 milliseconds (for 60 Amps)
-                                             // works fine here, with 40 for
-                                             // ConfigContinuousCurrentLimit(),
-                                             // but we can reduce to 10, 1, 10
-                                             // for safety while debugging
-      m_motor.ConfigContinuousCurrentLimit(40);
+#ifdef SAFETY_LIMITS
+      m_motor.ConfigPeakCurrentLimit(10);       // limit motor power severely
+      m_motor.ConfigContinuousCurrentLimit(10); // to 10 Amps
+#else
+      m_motor.ConfigPeakCurrentLimit(60);        // 60 works here for miniCIMs,
+                                                 // or maybe 40 Amps is enough,
+                                                 // but we reduce to 10, 1, 10
+      m_motor.ConfigContinuousCurrentLimit(60);  // for safety while debugging
+#endif
       m_motor.EnableCurrentLimit(true);
 
                                           // Config 100% motor output to 12.0V
@@ -1947,10 +2497,11 @@ class Robot : public frc::TimedRobot {
       bool       bRetVal = false;
       static struct maneuver mSeqPrev = { 0, M_STOP, 0.0, false, 0.0 };
       // static int icmdSeqManeuverCallCount = 0;
+      static int iShootCount = 200;
 
                    // print debugging info (this code should be removed later)
       if ( ( mSeqPrev.index != mSeq.index ) ||
-	   ( mSeqPrev.type  != mSeq.type  )    ) {
+           ( mSeqPrev.type  != mSeq.type  )    ) {
             cout << "executeManeuver: Changed Maneuver, index: ";
             cout << mSeqPrev.index << " > " << mSeq.index << " ." << endl;
             cout << "                                    type: ";
@@ -1972,30 +2523,31 @@ class Robot : public frc::TimedRobot {
                    // Drive straight at the specified yaw angle for a specified
                    // distance, (but if mSeq.bDivertToPcell is TRUE, and
                    // a powercell is seen by the camera, then drive toward that
-		   // powercell instead).
+                   // powercell instead).
                    // The DriveToDistance() function returns true
                    // when it has driven far enough.
          bRetVal = DriveToDistance( sCurrState.initialYaw + mSeq.yaw,
-			            mSeq.distance,
-				    mSeq.bDivertToPcell,
-				    false );
-				  // If we have driven far enough...
-	 if ( bRetVal ) {
+                                    mSeq.distance,
+                                    mSeq.bDivertToPcell,
+                                    false );
+                                  // If we have driven far enough...
+         bRetVal = true;  // debugging temporary
+         if ( bRetVal ) {
             cout << "EM: DriveToDistance completed, heading: ";
-	    cout << sCurrState.yawPitchRoll[0]  << endl;
-            cout << "            distance ticks, left/right: ";
-	    cout << sCurrState.iLSMasterPosition << " / ";
-	    cout << sCurrState.iRSMasterPosition << "." << endl;
-	 }
+            cout << sCurrState.yawPitchRoll[0]  << endl;
+            cout << "            distance rotations, left/right: ";
+            cout << sCurrState.dLSMasterPosition << " / ";
+            cout << sCurrState.dRSMasterPosition << "." << endl;
+         }
          break;
 
       case M_TURN_LEFT:
-	        // Tell the drive motors to turn left, with a radius of ~12"
+                // Tell the drive motors to turn left, with a radius of ~12"
                 // We measured this with 0.4/-0.3, and that turns left with
-		// a radius of 14"
-		// The "mSeq.distance" parameter is only checked to see if it
-		// is positive or negative, to determine which way to travel
-		// while we are turning.
+                // a radius of 14"
+                // The "mSeq.distance" parameter is only checked to see if it
+                // is positive or negative, to determine which way to travel
+                // while we are turning.
          if ( -0.001 < mSeq.distance ) {   // if requested distance is positive
             // Team4918Drive( 0.3, -0.24 );   // turn left while driving forward
             // Team4918Drive( 0.5, -0.40 );   // turn left while driving forward
@@ -2005,24 +2557,24 @@ class Robot : public frc::TimedRobot {
             } else {
                Team4918Drive( 0.5, -0.44 );   // turn left widely
             }
-	 } else {                          // else
-            Team4918Drive( -0.5, -0.44 );   // turn left tightly
-	 }
+         } else {                          // else
+            Team4918Drive( -0.5, -0.44 );   // turn left tightly in reverse
+         }
                                   // A left turn increases the angle
-                 		  // (like in trigonometry, not like a compass)
-				  // If we have turned far enough...
-	 if ( sCurrState.initialYaw + mSeq.yaw < sCurrState.yawPitchRoll[0] ) {
+                                  // (like in trigonometry, not like a compass)
+                                  // If we have turned far enough...
+         if ( sCurrState.initialYaw + mSeq.yaw < sCurrState.yawPitchRoll[0] ) {
             cout << "EM: Left turn completed, heading: ";
-	    cout << sCurrState.yawPitchRoll[0]  << endl;
+            cout << sCurrState.yawPitchRoll[0]  << endl;
             bRetVal = true;                           // and exit this maneuver
-	 }
+         }
          break;
 
       case M_TURN_RIGHT:
-	        // Tell the drive motors to turn right, with a radius of ~12"
-		// The "mSeq.distance" parameter is only checked to see if it
-		// is positive or negative, to determine which way to travel
-		// while we are turning.
+                // Tell the drive motors to turn right, with a radius of ~12"
+                // The "mSeq.distance" parameter is only checked to see if it
+                // is positive or negative, to determine which way to travel
+                // while we are turning.
          if ( -0.001 < mSeq.distance ) {   // if requested distance is positive
             // Team4918Drive( 0.3,  0.24 );   // turn right while driving forward
             // Team4918Drive( 0.5,  0.40 );   // turn right while driving forward
@@ -2033,17 +2585,17 @@ class Robot : public frc::TimedRobot {
             } else {
                Team4918Drive( 0.5,  0.44 );   // turn right widely
             }
-	 } else {                          // else
-            Team4918Drive( -0.5,  0.44 );   // turn right tightly
-	 }
+         } else {                          // else
+            Team4918Drive( -0.5,  0.44 );   // turn right tightly in reverse
+         }
                                   // A right turn decreases the angle
-                 		  // (like in trigonometry, not like a compass)
-				  // If we have turned far enough...
-	 if ( sCurrState.yawPitchRoll[0] < sCurrState.initialYaw + mSeq.yaw ) {
+                                  // (like in trigonometry, not like a compass)
+                                  // If we have turned far enough...
+         if ( sCurrState.yawPitchRoll[0] < sCurrState.initialYaw + mSeq.yaw ) {
             cout << "EM: Right turn completed, heading: ";
-	    cout << sCurrState.yawPitchRoll[0]  << endl;
+            cout << sCurrState.yawPitchRoll[0]  << endl;
             bRetVal = true;                           // and exit this maneuver
-	 }
+         }
          break;
 
       case M_ROTATE:
@@ -2051,41 +2603,63 @@ class Robot : public frc::TimedRobot {
                      // The TurnToHeading() function returns true when it has
                      // rotated far enough.
          bRetVal = TurnToHeading( sCurrState.initialYaw + mSeq.yaw,
-			          false );
-				  // If we have rotated far enough...
-	 if ( bRetVal ) {
+                                  false );
+                                  // If we have rotated far enough...
+         if ( bRetVal ) {
             cout << "EM: Rotation completed, heading: ";
-	    cout << sCurrState.yawPitchRoll[0]  << endl;
-	 }
+            cout << sCurrState.yawPitchRoll[0]  << endl;
+         }
          break;
 
       case M_SHIFT_LOW:
          bRetVal = true;                  // and exit this maneuver immediately
          sCurrState.highGear = false;
-         m_shiftingSolenoid.Set( false );
+//       m_shiftingSolenoid.Set( false );
          break;
 
       case M_SHIFT_HIGH:
          bRetVal = true;                  // and exit this maneuver immediately
          sCurrState.highGear = true;
-         m_shiftingSolenoid.Set( true );
+//       m_shiftingSolenoid.Set( true );
+         break;
+
+      case M_SHOOT:
+         Team4918Drive( 0.0, 0.0 );       // Make sure drive motors are stopped
+         sPrevState.conX = 0.0;
+         sCurrState.conX = 1.0;
+         RunShooter();
+         // Shoot();
+         if ( mSeqPrev.type != mSeq.type ) {          // first call to M_SHOOT?
+            iShootCount = 200;  // yes; stay in M_SHOOT for at least 4 seconds
+         } else if ( ( iShootCount < 100 ) &&         // else if at least
+              ( sCurrState.powercellInIntake ||       // 1 ball in conveyor
+                sCurrState.powercellInPosition5 ) ) {
+            iShootCount = 100;    // then keep shooting for at least 2 seconds
+         } else {
+            iShootCount--;
+         }
+         if ( 0 < iShootCount ) {
+            bRetVal = false; // stay in this maneuver until balls are all gone.
+         } else {
+            bRetVal = true;  // done shooting; change to next maneuver.
+         }
          break;
 
       case M_TERMINATE_SEQ:
          Team4918Drive( 0.0, 0.0 );       // Make sure drive motors are stopped
-	 if ( mSeqPrev.type != mSeq.type ) {
+         if ( mSeqPrev.type != mSeq.type ) {
             cout << "EM: M_TERMINATE_SEQ: no further movement will happen!";
-	 }
+         }
          bRetVal = false;                 // and stay in this maneuver forever.
          break;
 
       default:
          cout << "EM: ERROR: Unknown maneuver type: ";
-	 cout << mSeq.type << "." << endl;
+         cout << mSeq.type << "." << endl;
          break;
       }
               // failsafe maneuvers limit:
-	      // If more than 2000 seconds have passed, stop all maneuvers
+              // If more than 2000 seconds have passed, stop all maneuvers
       // if ( (2000 * 50) < icmdSeqManeuverCallCount ) {
       //    bRetVal = true;
       // }
@@ -2094,7 +2668,7 @@ class Robot : public frc::TimedRobot {
                          // the next maneuver we get.
  
       return bRetVal;
-   }
+   }      // executeManeuver()
 
 
       /*---------------------------------------------------------------------*/
@@ -2114,9 +2688,9 @@ class Robot : public frc::TimedRobot {
                       // execute the current maneuver, and if it is finished...
       if ( executeManeuver( mSeq[ maneuverIndex ] ) ) {
          maneuverIndex++;                                // go to next maneuver
-	 mSeqNext = mSeq[maneuverIndex];
+         mSeqNext = mSeq[maneuverIndex];
                                     // if next maneuver is a drive to distance,
-	 if ( M_DRIVE_STRAIGHT == mSeqNext.type ) {
+         if ( M_DRIVE_STRAIGHT == mSeqNext.type ) {
                                     // then initialize the starting point
             DriveToDistance( mSeqNext.yaw,
                              mSeqNext.distance,
@@ -2126,12 +2700,12 @@ class Robot : public frc::TimedRobot {
                       // Else if next maneuver is a rotate, then set the
                       // initial (starting) yaw angle.
                       // NO: call TurnToHeading(..., true) just once in
-		      // AutonomousInit(), and nowhere else, so all yaw values
+                      // AutonomousInit(), and nowhere else, so all yaw values
                       // are always based on the initial yaw of the robot when
-		      // AutonomousInit() was called.
-		      // This allows all yaw values in the maneuver struct
+                      // AutonomousInit() was called.
+                      // This allows all yaw values in the maneuver struct
                       // to be absolute, and relative to the initial yaw angle
-		      // of the robot at AutonomousInit() time.
+                      // of the robot at AutonomousInit() time.
             //    TurnToHeading( mSeqNext.yaw, true ) ) {
          }
       }
@@ -2150,98 +2724,87 @@ class Robot : public frc::TimedRobot {
    void RobotInit() {
       static int iRobotInitCallCount = 0;
 
+      // see /home/team4918/wpilib/2022/utility/resources/app/resources/cpp/
+      //      src/examples/DigitalCommunication/cpp/Robot.cpp
+      // and /home/team4918/.gradle/caches/transforms-3/
+      //      f997ad03a3ad7475ff8f27c762137217/transformed/
+      //      wpilibc-cpp-2022.2.1-headers/frc/DriverStation.h
+      if ( frc::DriverStation::kRed == frc::DriverStation::GetAlliance() ) {
+         WeAreOnRedAlliance = true;    // we are on red alliance
+         cout << "RobotInit(): We are on the Red Alliance." << endl;
+      } else {
+         WeAreOnRedAlliance = false;   // we are on blue alliance
+         cout << "RobotInit(): We are on the Blue Alliance." << endl;
+      }
+
       iRobotInitCallCount++;
 
       if ( 1 == iRobotInitCallCount ) {
+         gyro.Calibrate();    // Calibrate Gyro on powerup, but never afterward
+#ifdef VISION_PROCESSING
                                 // start a thread processing USB camera images
          std::thread visionThread(VisionThread);
          visionThread.detach();
+#endif  // if VISION_PROCESSING
       }
 
       powercellOnVideo.TestMode = false;
 
-      m_motorLSSlave1.Follow(m_motorLSMaster);
-      m_motorLSSlave2.Follow(m_motorLSMaster);
-      m_motorRSSlave1.Follow(m_motorRSMaster);
-      m_motorRSSlave2.Follow(m_motorRSMaster);
-      m_motorConveySlave.Follow(m_motorConveyMaster);
+      m_motorLSFollow.Follow( m_motorLSMaster );    // For SparkMax/Neo motors
+      m_motorRSFollow.Follow( m_motorRSMaster );
 
-      MotorInit( m_motorLSMaster );
-      MotorInit( m_motorRSMaster );
+//    m_motorConveySlave.Follow(m_motorConveyMaster);
+
+                                          // SparkMax/Neo motors (drive motors)
+      MotorInitSpark( m_motorLSMaster, m_LSMasterPID, m_LSMasterEncoder );
+      MotorInitSpark( m_motorRSMaster, m_RSMasterPID, m_RSMasterEncoder );
+      m_LSMasterForwardLimitSwitch.EnableLimitSwitch( false );
+      m_LSMasterReverseLimitSwitch.EnableLimitSwitch( false );
+      m_RSMasterForwardLimitSwitch.EnableLimitSwitch( false );
+      m_RSMasterReverseLimitSwitch.EnableLimitSwitch( false );
+
       MotorInit( m_motorTopShooter );
       MotorInit( m_motorBotShooter );
-      MotorInit( m_motorClimberPole );
+      m_motorTopShooter.ConfigPeakOutputReverse(  0.0, 10 );
+      m_motorBotShooter.ConfigPeakOutputReverse(  0.0, 10 );
+      MotorInit( m_motorLeftSideClimberPole  );
+      MotorInit( m_motorRightSideClimberPole );
                                     // invert encoder value positive/negative
                                     // and motor direction, for some motors.
       //    m_motorLSMaster.SetSensorPhase(true);
-      m_motorLSMaster.SetSensorPhase(false);
-      // m_motorLSMaster.SetInverted(false);
+//    m_motorLSMaster.SetSensorPhase(false);
       //    m_motorRSMaster.SetSensorPhase(true);
-      m_motorRSMaster.SetSensorPhase(false);
-      // m_motorRSMaster.SetInverted(false);
+//    m_motorRSMaster.SetSensorPhase(false);
+  //  m_motorRSMaster.SetInverted(true);   // added 29jan2022
       //    m_motorTopShooter.SetSensorPhase(false);
-      m_motorTopShooter.SetSensorPhase(true);
-      // m_motorTopShooter.SetInverted(false);
-      //    m_motorBotShooter.SetSensorPhase(false);
+      m_motorTopShooter.SetSensorPhase(false);  // this is necessary for PID
+                                                // settings to work correctly
+      m_motorTopShooter.SetInverted(false);
       m_motorBotShooter.SetSensorPhase(true);
-      // m_motorBotShooter.SetInverted(false);
-      m_motorClimberPole.SetSensorPhase(false);
-      m_motorClimberPole.SetInverted(false);
+      m_motorBotShooter.SetInverted(false);
+      m_motorLeftSideClimberPole.SetSensorPhase(false);
+      m_motorLeftSideClimberPole.SetInverted(false);
+      m_motorRightSideClimberPole.SetSensorPhase(false);
+      m_motorRightSideClimberPole.SetInverted(false);
 
-            /* Set Closed Loop PIDF gains in slot0 - see documentation */
-                                                    // if encoder is connected
-      if ( OK == m_motorLSMaster.ConfigSelectedFeedbackSensor(
-                            FeedbackDevice::CTRE_MagEncoder_Relative, 0, 10 ) ) {
-         m_motorLSMaster.SelectProfileSlot( 0, 0 );
-         m_motorLSMaster.Config_kF( 0, 0.025,   10 );   // these work well for .15
-         m_motorLSMaster.Config_kP( 0, 0.02,    10 );   // RPMs above ~200 0.2
-         m_motorLSMaster.Config_kI( 0, 0.0,     10 );// 0.0002
-         m_motorLSMaster.Config_kD( 0, 0.0,     10 );
-         cout << "LSMaster encoder is okay" << endl;
-      } else {
-         m_motorLSMaster.SelectProfileSlot( 0, 0 );
-         m_motorLSMaster.Config_kF( 0, 0.15, 10 );   // may have to be higher
-         m_motorLSMaster.Config_kP( 0, 0.0,  10 );
-         m_motorLSMaster.Config_kI( 0, 0.0,  10 );
-         m_motorLSMaster.Config_kD( 0, 0.0,  10 );
-         cout << "LSMaster encoder is DISCONNECTED" << endl;
-      }
-
-                                                    // if encoder is connected
-      if ( OK == m_motorRSMaster.ConfigSelectedFeedbackSensor(
-                          FeedbackDevice::CTRE_MagEncoder_Relative, 0, 10 ) ) {
-         m_motorRSMaster.SelectProfileSlot( 0, 0 );
-         m_motorRSMaster.Config_kF( 0, 0.025,   10 ); // these work well for .15
-         m_motorRSMaster.Config_kP( 0, 0.02,    10 ); // RPMs above ~200 0.2
-         m_motorRSMaster.Config_kI( 0, 0.0, 10 ); // 0.0002
-         m_motorRSMaster.Config_kD( 0, 0.0,   10 ); // 10.0
-         cout << "RSMaster encoder is okay" << endl;
-
-      } else {
-         m_motorRSMaster.SelectProfileSlot( 0, 0 );
-         m_motorRSMaster.Config_kF( 0, 0.15, 10 );   // may have to be higher
-         m_motorRSMaster.Config_kP( 0, 0.0,  10 );
-         m_motorRSMaster.Config_kI( 0, 0.0,  10 );
-         m_motorRSMaster.Config_kD( 0, 0.0,  10 );
-         cout << "RSMaster encoder is DISCONNECTED" << endl;
-      }
-
-      m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-      m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-      m_motorLSMaster.SetIntegralAccumulator( 0.0 );
-      m_motorRSMaster.SetIntegralAccumulator( 0.0 );
-      LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
-      RSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
+  //  m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
+  //  m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
+  //  m_motorLSMaster.SetIntegralAccumulator( 0.0 );
+  //  m_motorRSMaster.SetIntegralAccumulator( 0.0 );
+  //  LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
+  //  RSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
+      LSMotorState.targetVelocityRPM = 0.0;
+      RSMotorState.targetVelocityRPM = 0.0;
       Team4918Drive( 0.0, 0.0 );          // make sure drive motors are stopped
 
                                                      // if encoder is connected
       if ( OK == m_motorTopShooter.ConfigSelectedFeedbackSensor(
                           FeedbackDevice::CTRE_MagEncoder_Relative, 0, 10 ) ) {
          m_motorTopShooter.SelectProfileSlot( 0, 0 );
-         m_motorTopShooter.Config_kF( 0, 0.02,    10 ); // 0.02 0.01
-         m_motorTopShooter.Config_kP( 0, 0.3,     10 ); // 0.2 0.08
+         m_motorTopShooter.Config_kF( 0, 0.03,    10 ); // 0.03 0.02 0.01
+         m_motorTopShooter.Config_kP( 0, 0.35,    10 ); // 0.01 0.2 0.08
          m_motorTopShooter.Config_kI( 0, 0.0,     10 ); // was 0.0 0.00008
-         m_motorTopShooter.Config_kD( 0, 0.8,     10 );
+         m_motorTopShooter.Config_kD( 0, 4.0,     10 ); // 0.8
       } else {
          m_motorTopShooter.SelectProfileSlot( 0, 0 );
          m_motorTopShooter.Config_kF( 0, 0.01, 10 );   // may have to be higher
@@ -2254,10 +2817,10 @@ class Robot : public frc::TimedRobot {
       if ( OK == m_motorBotShooter.ConfigSelectedFeedbackSensor(
                           FeedbackDevice::CTRE_MagEncoder_Relative, 0, 10 ) ) {
          m_motorBotShooter.SelectProfileSlot( 0, 0 );
-         m_motorBotShooter.Config_kF( 0, 0.02,    10 ); // 0.02 0.01
-         m_motorBotShooter.Config_kP( 0, 0.3,     10 ); // 0.2 0.08
+         m_motorBotShooter.Config_kF( 0, 0.03,    10 ); // 0.02 0.01
+         m_motorBotShooter.Config_kP( 0, 0.35,    10 ); // 0.3 0.2 0.08
          m_motorBotShooter.Config_kI( 0, 0.0,     10 ); // 0.0 0.00008
-         m_motorBotShooter.Config_kD( 0, 0.8,     10 );
+         m_motorBotShooter.Config_kD( 0, 4.0,     10 ); // 0.8
       } else {
          m_motorBotShooter.SelectProfileSlot( 0, 0 );
          m_motorBotShooter.Config_kF( 0, 0.01, 10 );   // may have to be higher
@@ -2266,16 +2829,16 @@ class Robot : public frc::TimedRobot {
          m_motorBotShooter.Config_kD( 0, 0.0,  10 );
       }
 
-      m_motorConveyMaster.SetNeutralMode( NeutralMode::Brake );
+//    m_motorConveyMaster.SetNeutralMode( NeutralMode::Brake );
 
       sCurrState.highGear = false;
-      m_shiftingSolenoid.Set(false);
+//    m_shiftingSolenoid.Set(false);
       iCallCount++;
       sCurrState.teleop = false;
       // new m_compressor(0);           // initialize compressor
       // new m_compressor = frc::Compressor(0); // initialize compressor
 
-      // Default to a length of 60; start empty output
+      // Default to a length of 60 LEDs; start with empty output
       // length is expensive to set, so only set it once, then just update data
       m_led.SetLength( kLEDStripLength );
       m_led.SetData( m_ledBuffer );
@@ -2295,14 +2858,14 @@ class Robot : public frc::TimedRobot {
       /* motors, but it can still check the joystick, joystick/console       */
       /* buttons, and sensors.                                               */
       /*---------------------------------------------------------------------*/
-//    void RobotPeriodic() override {
+      void RobotPeriodic() override {
 //       static int iCallCount = 0;      iCallCount++;
 // 
 //      GetAllVariables();
 // 
 //      SwitchCameraIfNecessary();
 //      cout << "RobotPeriodic()" << endl;
-//    }
+      }
 
 
       /*---------------------------------------------------------------------*/
@@ -2311,18 +2874,27 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void DisabledInit() override {
 
-      m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-      m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-      m_motorLSMaster.SetIntegralAccumulator( 0.0 );
-      m_motorRSMaster.SetIntegralAccumulator( 0.0 );
-      LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
-      RSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
+  //  m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
+  //  m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
+  //  m_motorLSMaster.SetIntegralAccumulator( 0.0 );
+  //  m_motorRSMaster.SetIntegralAccumulator( 0.0 );
+  //  LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
+  //  RSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
+      LSMotorState.targetVelocityRPM = 0.0;
+      RSMotorState.targetVelocityRPM = 0.0;
       Team4918Drive( 0.0, 0.0 );          // make sure drive motors are stopped
 
       powercellOnVideo.TestMode = false;
       // Should power off all motors here.
    }
 
+      /*---------------------------------------------------------------------*/
+      /* DisabledPeriodic()                                                  */
+      /* This function is called every 20 milliseconds, as long as the robot */
+      /* is in Disabled mode.                                                */
+      /*---------------------------------------------------------------------*/
+   void DisabledPeriodic() override {
+   }
 
       /*---------------------------------------------------------------------*/
       /* TestInit()                                                          */
@@ -2337,27 +2909,55 @@ class Robot : public frc::TimedRobot {
       for ( int i = 0; i < kLEDStripLength; i++ ) {
                      // range of arg1 (hue) is 0-180;
                      // range of arg2 and arg3 (saturation and value) is 0-255
-         m_ledBuffer[i].SetHSV(100, 255, 128);  // half-bright blue
+         // m_ledBuffer[i].SetHSV(100, 255, 128);  // half-bright blue
+         m_ledBuffer[i].SetRGB( 0, 0, 255); // fully-saturated pure blue
+         // m_ledBuffer[i].SetRGB( 255, 0, 0 );  // fully-saturated pure red
+      }
+      m_led.SetData( m_ledBuffer );
+   }
+
+   void LEDAllianceColor() {
+      for ( int i = 0; i < kLEDStripLength; i++ ) {
+         if ( WeAreOnRedAlliance ) {
+            m_ledBuffer[i].SetRGB( 255, 0, 0 );  // fully-saturated pure red
+         } else {
+            m_ledBuffer[i].SetRGB( 0, 0, 255); // fully-saturated pure blue
+         }
       }
       m_led.SetData( m_ledBuffer );
    }
 
    void LEDRainbow() {
-	      // for every pixel...
+              // for every pixel...
       for ( int i = 0; i < kLEDStripLength; i++ ) {
-	      // calculate the hue - hue is easier for rainbows because the
-	      // color shape is a circle, so only one value needs to increment
-	 const auto pixelHue = ( firstLEDStripPixelHue +
-			         (i + 180/kLEDStripLength) ) % 180;
+              // calculate the hue - hue is easier for rainbows because the
+              // color shape is a circle, so only one value needs to increment
+         const auto pixelHue = ( firstLEDStripPixelHue +
+                                 (i * 7 + 180/kLEDStripLength) ) % 180;
               // set the value
          m_ledBuffer[i].SetHSV( pixelHue, 255, 128 );
       }
       m_led.SetData( m_ledBuffer );
          // Increase the first pixel hue, to make the rainbow move every 20 ns
-      firstLEDStripPixelHue += 3;
+      firstLEDStripPixelHue += 10;
          // check bounds
       firstLEDStripPixelHue %= 180;
       m_led.SetData( m_ledBuffer );
+   }
+
+   void LEDTest() {
+      static int color=0;
+      // for every pixel...
+      for ( int i = 0; i < kLEDStripLength; i++ ) {
+         if ( i == color/3 ) {
+              // set the value
+            m_ledBuffer[i].SetHSV( color, 255, 128 );
+         } else {
+            m_ledBuffer[i].SetHSV( i*3, 255, 16 );
+         }
+      }
+      m_led.SetData( m_ledBuffer );
+      color = (color+1)%180;
    }
 
       /*---------------------------------------------------------------------*/
@@ -2372,7 +2972,7 @@ class Robot : public frc::TimedRobot {
       iCallCount++;
       #if 1 
       //follow left wall
-                     //pigeon units in trig directions, not compass directions
+             //pigeon/ADIS IMU units in trig directions, not compass directions
       // FollowWall(23.0, 0.0, 0.0, 35.0, -25.0);
       #else
       //follow right wall
@@ -2386,10 +2986,10 @@ class Robot : public frc::TimedRobot {
          //      << endl;
          // cout << "Sonar0 voltage:  " << distSensor0.GetVoltage() << endl;
              // convert to inches, with 100 centimeters/volt and 2.54 cm/inch
-         cout << "Sonar0 distance: " << distSensor0.GetVoltage() * 100 / 2.54
-              << " inches (" << distSensor0.GetVoltage() << ")." << endl; 
-         cout << "Sonar1 distance: " << distSensor1.GetVoltage() * 100 / 2.54
-              << " inches (" << distSensor1.GetVoltage() << ")." << endl; 
+//       cout << "Sonar0 distance: " << distSensor0.GetVoltage() * 100 / 2.54
+//            << " inches (" << distSensor0.GetVoltage() << ")." << endl; 
+//       cout << "Sonar1 distance: " << distSensor1.GetVoltage() * 100 / 2.54
+//            << " inches (" << distSensor1.GetVoltage() << ")." << endl; 
       }
 
       if ( 0 == iCallCount%100 )  {   // every 2 seconds
@@ -2397,8 +2997,10 @@ class Robot : public frc::TimedRobot {
       }
 //      cout << "TestPeriodic()" << endl;
 
-      LEDBlue();         // light the entire LED strip blue
+      // LEDAllianceColor();         // light the entire LED strip blue
+      // LEDBlue();         // light the entire LED strip blue
       // LEDRainbow();   // light the LED strip with a moving rainbow
+      LEDTest();
    }
 
 
@@ -2408,7 +3010,7 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void AutonomousInit() override {
       RobotInit();
-      m_compressor.EnableDigital();
+//    m_compressor.EnableDigital();
       limenttable->PutNumber( "ledMode", 3 );                   // turn LEDs on
       cout << "shoot 3 balls" << endl;
       // m_drive.StopMotor();
@@ -2416,18 +3018,16 @@ class Robot : public frc::TimedRobot {
       GetAllVariables();
       sCurrState.teleop = false;
       sCurrState.initialYaw = sCurrState.yawPitchRoll[0]; 
-      // TurnToHeading( sCurrState.initialYaw, true );
-      // DriveToDistance( sCurrState.initialYaw, 0.0, false, true );
-      m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-      m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-      m_motorLSMaster.SetIntegralAccumulator( 0.0 );
-      m_motorRSMaster.SetIntegralAccumulator( 0.0 );
-      m_motorLSMaster.ConfigClosedloopRamp(0.1);
-      m_motorRSMaster.ConfigClosedloopRamp(0.1);
-      m_motorLSMaster.ConfigOpenloopRamp(  0.1);
-      m_motorRSMaster.ConfigOpenloopRamp(  0.1);
-      LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
-      RSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
+  //  m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
+  //  m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
+  //  m_motorLSMaster.SetIntegralAccumulator( 0.0 );
+  //  m_motorRSMaster.SetIntegralAccumulator( 0.0 );
+//    m_motorLSMaster.ConfigClosedloopRamp(0.1);
+//    m_motorRSMaster.ConfigClosedloopRamp(0.1);
+  //  m_motorLSMaster.ConfigOpenloopRamp(  0.1);
+  //  m_motorRSMaster.ConfigOpenloopRamp(  0.1);
+      LSMotorState.targetVelocityRPM = 0.0;
+      RSMotorState.targetVelocityRPM = 0.0;
       Team4918Drive( 0.0, 0.0 );          // make sure drive motors are stopped
 
                              // mSeqIndex can be set to different values,
@@ -2438,9 +3038,9 @@ class Robot : public frc::TimedRobot {
       // mSeqIndex = 100;       // bounce sequence (works)
 
                              // Initialize yaw and distance, so next maneuvers
-			     // are relative to these current settings.
+                             // are relative to these current settings.
       TurnToHeading( sCurrState.initialYaw, true );
-      DriveToDistance (sCurrState.initialYaw, 0.0, false, true);
+      DriveToDistance( sCurrState.initialYaw, 0.0, false, true );
    }      // AutonomousInit()
 
 
@@ -2457,23 +3057,17 @@ class Robot : public frc::TimedRobot {
 
       iCallCount++;
 
-      //m_motorIntake.Set(ControlMode::PercentOutput, -0.4);
-
-//      if ( sCurrState.conButton[8] )   {            // Run intake forward.
-         if (  sCurrState.powercellInIntake ) {       // if powercell in intake
-            m_motorIntake.Set( ControlMode::PercentOutput, -0.1 ); // be gentle
-	 } else {
-            m_motorIntake.Set( ControlMode::PercentOutput, -0.4 ); // be strong
-	 }
-//      } else {                                         // Stop the intake.
-//         m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
-//      }
+      if (  sCurrState.powercellInIntake ) {       // if powercell in intake
+         m_motorIntake.Set( ControlMode::PercentOutput,  0.1 ); // be gentle
+      } else {
+         m_motorIntake.Set( ControlMode::PercentOutput,  0.4 ); // be strong
+      }
 
       RunConveyor();
 
       // m_drive.StopMotor();
-      LSMotorState.targetVelocity_UnitsPer100ms = 0;        // Left Side drive
-      RSMotorState.targetVelocity_UnitsPer100ms = 0;        // Right Side drive
+      LSMotorState.targetVelocityRPM = 0.0;                // Left Side drive
+      RSMotorState.targetVelocityRPM = 0.0;                // Right Side drive
 
       // dDesiredYaw = sCurrState.initialYaw;
 
@@ -2481,16 +3075,18 @@ class Robot : public frc::TimedRobot {
                             // to next maneuver in the sequence when necessary.
       mSeqIndex = executeManeuverSequence( mSeqIndex );
       
-#ifdef JAG_NOTDEFINED
-      motorFindMinMaxVelocity( m_motorLSMaster, LSMotorState );
-      motorFindMinMaxVelocity( m_motorRSMaster, RSMotorState );
+      motorFindMinMaxVelocitySpark( m_LSMasterEncoder, LSMotorState );
+      motorFindMinMaxVelocitySpark( m_RSMasterEncoder, RSMotorState );
 
-      if ( 0 == iCallCount%50 ) {
-//         MotorDisplay( "LS:", m_motorLSMaster, LSMotorState ); 
-//         MotorDisplay( "RS:", m_motorRSMaster, RSMotorState );
+      if ( 10 == iCallCount%500 ) {                        // every 10 seconds
+         MotorDisplaySpark( "LS:", m_motorLSMaster, 
+                            m_LSMasterEncoder, LSMotorState );
+      } else if ( 11 == iCallCount%500 ) {                 // every 10 seconds
+         MotorDisplaySpark( "RS:", m_motorRSMaster, 
+                            m_RSMasterEncoder, RSMotorState );
+      } else if ( 12 == iCallCount%500 ) {                 // every 10 seconds
          IMUOrientationDisplay();
       }
-#endif
 
       return; 
 
@@ -2503,19 +3099,21 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void TeleopInit() override {
       RobotInit();
-      m_compressor.EnableDigital();
+//    m_compressor.EnableDigital();
                                                     // zero the drive encoders
-      m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-      m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-      m_motorLSMaster.SetIntegralAccumulator( 0.0 );
-      m_motorRSMaster.SetIntegralAccumulator( 0.0 );
-      m_motorLSMaster.ConfigClosedloopRamp(0.0);
-      m_motorRSMaster.ConfigClosedloopRamp(0.0);
-      m_motorLSMaster.ConfigOpenloopRamp(  0.0);
-      m_motorRSMaster.ConfigOpenloopRamp(  0.0);
-      LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
-      RSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
+  //  m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
+  //  m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
+  //  m_motorLSMaster.SetIntegralAccumulator( 0.0 );
+  //  m_motorRSMaster.SetIntegralAccumulator( 0.0 );
+  //  m_motorLSMaster.ConfigClosedloopRamp(0.0);
+  //  m_motorRSMaster.ConfigClosedloopRamp(0.0);
+  //  m_motorLSMaster.ConfigOpenloopRamp(  0.0);
+  //  m_motorRSMaster.ConfigOpenloopRamp(  0.0);
+  //  LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
+  //  RSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
       sCurrState.teleop = true;
+      LSMotorState.targetVelocityRPM = 0.0;
+      RSMotorState.targetVelocityRPM = 0.0;
       Team4918Drive( 0.0, 0.0 );          // make sure drive motors are stopped
    }      // TeleopInit()
 
@@ -2527,21 +3125,40 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void TeleopPeriodic() override {
 
-      GetAllVariables();  // this is necessary if we use any
-                          // of the Canbus variables.
+      GetAllVariables();  // this is necessary if we use any Canbus variables.
+      AdjustJoystickValues();  // adjust for joystick deadband and sensitivity
+#ifdef DISP_SMARTDASHBOARD
+      AdjustPIDValues();       // adjust Drive PID values, if changed on
+                               // SmartDashboard
+#endif
 
-      //m_motorIntake.Set(ControlMode::PercentOutput, -0.4);
+      // cout << "yawrate: " << sCurrState.rateXYZ[2] << endl;
+      //m_motorIntake.Set(ControlMode::PercentOutput,  0.4);
 
-      if ( sCurrState.conButton[8] )   {            // Run intake forward.
+      if ( BUTTON_RUNINTAKE )   {                        // Run intake forward.
          if (  sCurrState.powercellInIntake ) {       // if powercell in intake
-            m_motorIntake.Set( ControlMode::PercentOutput, -0.1 ); // be gentle
-	 } else {
-            m_motorIntake.Set( ControlMode::PercentOutput, -0.4 ); // be strong
-	 }
-      } else {                                         // Stop the intake.
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.1 ); // be gentle
+         } else {
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.4 ); // be strong
+         }
+                            // If necessary (for any reason), stop the intake.
+                                 // if the "RUN INTAKE" button was previously
+                                 // pressed (we were in manual intake mode)
+      } else if ( BUTTON_RUNINTAKE_PREV ) {
          m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
+                                 // or if button 1 was previously pressed
+                                 // and button 2 was not previously pressed
+                                 // (which would have caused us to call
+                                 // DriveToPowercell, which runs the intake).
+      } else if ( BUTTON_TARGET_PREV && !BUTTON_REVERSE_PREV ) {
+         m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
+                    // Or if we were previously driving the conveyor backwards
+                    // manually, but are not doing that now (we just stopped)
+      } else if ( BUTTON_MANUALCONVEYOR_PREV && BUTTON_CONVEYORBACKWARD_PREV &&
+                  ( !BUTTON_MANUALCONVEYOR || ! BUTTON_CONVEYORBACKWARD ) ) {
+            sCurrState.iIntakePercent = 0;            // Then stop the intake.
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
       } 
-
 
       RunDriveMotors();
 
@@ -2551,28 +3168,28 @@ class Robot : public frc::TimedRobot {
 
       RunConveyor();
 
-      RunColorWheel();
+//    RunColorWheel();
 
-      RunClimberPole();
-      RunClimberWinch();
+      RunClimberPole(  m_motorLeftSideClimberPole );
+      RunClimberPole( m_motorRightSideClimberPole );
+//    RunClimberWinch();
       SwitchCameraIfNecessary();
-
-
-      sPrevState = sCurrState;
 
       if ( 0 == iCallCount%100000 )  {   // every 20 seconds
          // cout << "TelPeriodic loop duration: ";
          // cout << frc::GetTime() - dTimeOfLastCall << endl;
                // use frc:Timer::GetFPGATimestamp() instead?
       }
+      LEDAllianceColor();         // light the entire LED strip blue
 
       iCallCount++;
    }      // TeleopPeriodic()
  
-};      // class Robot definition (derives from frc::TimedRobot )
+};     // class Robot definition (derives from frc::TimedRobot )
 
 
 Robot::sPowercellOnVideo Robot::powercellOnVideo = { true, 0, 0, -1, false, false };
+bool Robot::WeAreOnRedAlliance = { true };
 
 #ifndef RUNNING_FRC_TESTS
 int main() { return frc::StartRobot<Robot>(); }
