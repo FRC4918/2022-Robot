@@ -83,6 +83,8 @@ class Robot : public frc::TimedRobot {
    static const int LSFollowDeviceID = 14;
    static const int RSMasterDeviceID = 10;
    static const int RSFollowDeviceID =  1;
+   static const int LSClimberDeviceID = 13;
+   static const int RSClimberDeviceID =  2;
    rev::CANSparkMax m_motorLSMaster{ LSMasterDeviceID,
                                      rev::CANSparkMax::MotorType::kBrushless};
    rev::CANSparkMax m_motorLSFollow{ LSFollowDeviceID,
@@ -91,16 +93,13 @@ class Robot : public frc::TimedRobot {
                                      rev::CANSparkMax::MotorType::kBrushless};
    rev::CANSparkMax m_motorRSFollow{ RSFollowDeviceID,
                                      rev::CANSparkMax::MotorType::kBrushless};
+   rev::CANSparkMax m_motorLSClimber{ LSClimberDeviceID,
+                                     rev::CANSparkMax::MotorType::kBrushed};
+   rev::CANSparkMax m_motorRSClimber{ RSClimberDeviceID,
+                                     rev::CANSparkMax::MotorType::kBrushed};
 
-      // TEMPORARY: switch TopShooter to 2, and RightSideClimber to 3,
-      // because the number 3 Talon failed.  When we replace it, we can
-      // wire it up correctly again and change this back.
-// WPI_TalonSRX m_motorTopShooter{     3 };   // top motor on shooter
-   WPI_TalonSRX m_motorTopShooter{     2 };   // TEMP: top motor on shooter
+   WPI_TalonSRX m_motorTopShooter{     3 };   // top motor on shooter
    WPI_TalonSRX m_motorBotShooter{    12 };   // bottom motor on shooter
-// WPI_TalonSRX m_motorRightSideClimberPole{  2 };  // telescoping pole motor
-   WPI_TalonSRX m_motorRightSideClimberPole{  3 };  // TEMP: telescoping pole motor
-   WPI_TalonSRX m_motorLeftSideClimberPole{  13 };  // telescoping pole motor
    WPI_VictorSPX m_motorIntake{        4 };   // intake motor
    WPI_VictorSPX m_motorConveyMaster{ 11 };   // conveyor motor
 
@@ -487,6 +486,18 @@ class Robot : public frc::TimedRobot {
    double DrivePIDkFF = 0.0017;  // REV example had: 0.000015;
    double DrivePIDkMaxOutput =  1.0;
    double DrivePIDkMinOutput = -1.0;
+   rev::SparkMaxLimitSwitch m_LSClimberForwardLimitSwitch =
+                   m_motorLSClimber.GetForwardLimitSwitch(
+                            rev::SparkMaxLimitSwitch::Type::kNormallyClosed );
+   rev::SparkMaxLimitSwitch m_LSClimberReverseLimitSwitch =
+                   m_motorLSClimber.GetReverseLimitSwitch(
+                            rev::SparkMaxLimitSwitch::Type::kNormallyClosed );
+   rev::SparkMaxLimitSwitch m_RSClimberForwardLimitSwitch =
+                   m_motorRSClimber.GetForwardLimitSwitch(
+                            rev::SparkMaxLimitSwitch::Type::kNormallyClosed );
+   rev::SparkMaxLimitSwitch m_RSClimberReverseLimitSwitch =
+                   m_motorRSClimber.GetReverseLimitSwitch(
+                            rev::SparkMaxLimitSwitch::Type::kNormallyClosed );
 
  public:
 
@@ -1392,12 +1403,57 @@ class Robot : public frc::TimedRobot {
    }      // DriveByJoystick()
 
 
-      /*---------------------------------------------------------------------*/
-      /* DriveToLimelightTarget()                                            */
-      /* DriveToLimelightTarget() drives autonomously towards a limelight    */
-      /* vision target.                                                      */
-      /* It returns true if the limelight data is valid, false otherwise.    */
-      /*---------------------------------------------------------------------*/
+      // --------------------------------------------------------------------
+      // DriveToLimelightTarget()
+      // DriveToLimelightTarget() drives autonomously towards a limelight
+      // vision target.                                                    
+      // It returns true if the limelight data is valid, false otherwise.
+      // Maggie and Jeff found these limelight values work pretty well
+      // for the 2022 goal retro-reflective tape shapes:
+      //    Pipeline type: Limelight standard
+      //       Source Image: Camera
+      //       Resolutions 320x240 90fps
+      //       LEDs: On
+      //       Orientation: Normal
+      //       Exposure: 2
+      //       Black Level Offset: 24
+      //       Red Balance: 1428
+      //       Blue Balance: 1428
+      //       Thresholding page:
+      //       Hue: 40-87
+      //       Saturation: 99-255
+      //       Value: 106-255
+      //       Erosion Steps: 0
+      //       Dilation Steps: 1
+      //       X-Crop: -1 to 1
+      //       Y-Crop: -1 to 1
+      //       Invert Hue Selection (for red-colored objects): No
+      //    Countour filtering page:
+      //       Sort Mode: Highest
+      //       Area Percentage of Image: 0-.4712
+      //       Fullness (percentage of blue rectangle): 10-100
+      //       Width to Height Ratio (yellow rectangle): .5652 - 4.0302
+      //       Direction Filter: None
+      //       Smart Speckle Rejection: 0
+      //       Target Grouping: dual-target
+      //       Dual-target filters:
+      //       Intersection Filter: None
+      //    Output page:
+      //       Targeting Region: Center
+      //       Send Raw Corners? No
+      //       Crosshair Mode: Single Crosshair
+      //       Crosshair A:
+      //          (all settings: X, Y: 0.00
+      //       Hardware Panning:
+      //          (all settings: Pan X, Pan Y: 0.00
+      //    3D Experimental page:
+      //       Compute 3D? No
+      //       Force Convex? Yes
+      //       Contour Simplification Percentage? 5.0
+      //       Acceptable Error (px)? 8.0
+      //       Goal Z-offset? 0.0
+      //       Bind Target? Yes
+      // ---------------------------------------------------------------------
    bool DriveToLimelightTarget()  {
 
       bool returnVal = true;
@@ -1481,9 +1537,9 @@ class Robot : public frc::TimedRobot {
 
       iCallCount++;
       if (  sCurrState.powercellInIntake ) {       // if powercell in intake
-         m_motorIntake.Set( ControlMode::PercentOutput,  0.1 ); // be gentle
+         m_motorIntake.Set( ControlMode::PercentOutput,  1.0 ); // be gentle
       } else {
-         m_motorIntake.Set( ControlMode::PercentOutput,  0.4 ); // be strong
+         m_motorIntake.Set( ControlMode::PercentOutput,  1.0 ); // be strong
       }
       RunConveyor();
 
@@ -2149,10 +2205,10 @@ class Robot : public frc::TimedRobot {
             m_motorConveyMaster.Set( ControlMode::PercentOutput,
                                      0.5*sCurrState.joyZ );
             m_motorIntake.Set( ControlMode::PercentOutput,
-			       -0.4 * sCurrState.joyZ );
+			       -1.0 * sCurrState.joyZ );
 	 } else if ( BUTTON_CONVEYORFORWARD )   {     // Run conveyor forward.
             sCurrState.iConveyPercent = -80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, -1.0 );
          } else if ( BUTTON_CONVEYORBACKWARD ) {     // Run conveyor backward.
             sCurrState.iConveyPercent =  80;
             m_motorConveyMaster.Set( ControlMode::PercentOutput,  0.8 );
@@ -2227,40 +2283,41 @@ class Robot : public frc::TimedRobot {
       /* RunClimberPole()                                                    */
       /* Extend or retract the telescoping climber pole.                     */
       /*---------------------------------------------------------------------*/
-   void RunClimberPole( WPI_TalonSRX & m_motorClimberPole ) {
+   void RunClimberPole( rev::CANSparkMax & m_motorClimberPole,
+                       rev::SparkMaxLimitSwitch m_ClimberForwardLimitSwitch,
+                       rev::SparkMaxLimitSwitch m_ClimberReverseLimitSwitch ) {
       static int iCallCount = 0;
-//    static bool limitSwitchHasBeenHit = false;
+      static bool limitSwitchHasBeenHit = false;
       iCallCount++;
 
                      // if BOTH climber buttons pressed, run the climber motor
                      // according to the throttle (Z-Axis) on the joystick
       if ( BUTTON_CLIMBERUP && BUTTON_CLIMBERDOWN ) {
-         m_motorClimberPole.Set( ControlMode::PercentOutput,
-                                 0.5*sCurrState.joyZ);
+         m_motorClimberPole.Set( 0.5*sCurrState.joyZ );
       
       } else if ( BUTTON_CLIMBERUP ){
          //if ( !BUTTON_CLIMBERUP_PREV ) {       // if button 1 has just been
            // limitSwitchHasBeenHit = false;       // pressed, reset to start
            // m_compressor.Stop();
          //}
-//       if ( limitSwitchHasBeenHit ) {
+         if ( limitSwitchHasBeenHit ) {
                  // we are at the top; just supply a little power to stay there
-//          m_motorClimberPole.Set( ControlMode::PercentOutput, 0.10 );
-//       } else {
+            m_motorClimberPole.Set( 0.10 );
+         } else {
                                                    // apply full climbing power
-            m_motorClimberPole.Set( ControlMode::PercentOutput, 0.4 );
-            if ( m_motorClimberPole.IsFwdLimitSwitchClosed() ) {
-//             limitSwitchHasBeenHit = true;
+            m_motorClimberPole.Set( 0.4 );
+	    if ( m_ClimberForwardLimitSwitch.Get() ) {
+               limitSwitchHasBeenHit = true;
             }
-//       }
+         }
       } else if (BUTTON_CLIMBERDOWN ) {
-         m_motorClimberPole.Set( ControlMode::PercentOutput, -0.05);
+         m_motorClimberPole.Set( -0.05 );
            
       } else { 
          // Else neither button is currently being pressed.  If either was
          // previously pressed, stop sending power to climber pole motor
          if ( BUTTON_CLIMBERUP_PREV || BUTTON_CLIMBERDOWN_PREV ) {
-            m_motorClimberPole.Set( ControlMode::PercentOutput, 0.0);
+            m_motorClimberPole.Set( 0.0 );
          }
       }
       
@@ -2273,10 +2330,10 @@ class Robot : public frc::TimedRobot {
                cout << "ClimberDown: ";
             }
             cout << setw(5) <<
-               m_motorClimberPole.GetStatorCurrent() << "A" << endl;
-            if ( m_motorClimberPole.IsFwdLimitSwitchClosed() ) {
+               m_motorClimberPole.GetOutputCurrent() << "A" << endl;
+	    if ( m_ClimberForwardLimitSwitch.Get() ) {
                cout << "Climber pole at top." << endl;
-            } else if ( m_motorClimberPole.IsRevLimitSwitchClosed() ) {
+            } else if ( m_ClimberReverseLimitSwitch.Get() ) {
                cout << "Climber pole at bottom." << endl;
             }  
          }
@@ -2304,6 +2361,54 @@ class Robot : public frc::TimedRobot {
       }
    }      // RunClimberWinch()
 #endif
+
+
+      /*---------------------------------------------------------------------*/
+      /* MotorInitSparkBrushed()                                                    */
+      /* Setup the initial configuration of a brushed motor, driven by a     */
+      /* Spark Max controller.  These settings can be superseded after this  */
+      /* function is called, for the needs of each specific SparkMax-driven  */
+      /* brushed motor.                                                      */
+      /*---------------------------------------------------------------------*/
+   void MotorInitSparkBrushed( rev::CANSparkMax & m_motor ) {
+
+      m_motor.RestoreFactoryDefaults( false );
+
+      m_motor.EnableSoftLimit( rev::CANSparkMax::SoftLimitDirection::kForward,
+                               false );
+      m_motor.EnableSoftLimit( rev::CANSparkMax::SoftLimitDirection::kReverse,
+                               false );
+         /*
+          * Configure Spark Max Output direction.
+          * Sensor (encoder) direction would be set by
+          * m_motorEncoder.SetInverted( true), but that doesn't work with
+          * hall-effect encoders like we have on our Neo drive motors.
+          */
+      m_motor.SetInverted( true );  // invert direction of motor itself.
+
+            /* Set limits to how much current will be sent through the motor */
+#ifdef SAFETY_LIMITS
+                 // 10 Amps below 5000 RPM, above 5000 RPM it ramps from
+                 // 10 Amps down to  5 Amps at 5700 RPM
+		 // At this low current limit, the robot will be unable to
+		 // rotate-in-place on carpet.
+      m_motor.SetSmartCurrentLimit( 10,  5, 5000 );
+#else
+                 // 30 Amps below 5000 RPM, above 5000 RPM it ramps from
+                 // 30 Amps down to 10 Amps at 5700 RPM
+      m_motor.SetSmartCurrentLimit( 30, 10, 5000 );
+#endif
+
+                                          // Config 100% motor output to 12.0V
+      m_motor.EnableVoltageCompensation( 12.0 );
+
+               /* Set ramp rate (how fast motor accelerates or decelerates) */
+      m_motor.SetClosedLoopRampRate(0.1);
+      m_motor.SetOpenLoopRampRate(  0.1);
+
+      m_motor.SetIdleMode( rev::CANSparkMax::IdleMode::kCoast );
+
+   }      // MotorInitSpark()
 
 
       /*---------------------------------------------------------------------*/
@@ -2767,8 +2872,13 @@ class Robot : public frc::TimedRobot {
       MotorInit( m_motorBotShooter );
       m_motorTopShooter.ConfigPeakOutputReverse(  0.0, 10 );
       m_motorBotShooter.ConfigPeakOutputReverse(  0.0, 10 );
-      MotorInit( m_motorLeftSideClimberPole  );
-      MotorInit( m_motorRightSideClimberPole );
+      MotorInitSparkBrushed( m_motorLSClimber );
+      MotorInitSparkBrushed( m_motorRSClimber );
+      m_LSClimberForwardLimitSwitch.EnableLimitSwitch( true );
+      m_LSClimberReverseLimitSwitch.EnableLimitSwitch( true );
+      m_RSClimberForwardLimitSwitch.EnableLimitSwitch( true );
+      m_RSClimberReverseLimitSwitch.EnableLimitSwitch( true );
+
                                     // invert encoder value positive/negative
                                     // and motor direction, for some motors.
       //    m_motorLSMaster.SetSensorPhase(true);
@@ -2782,10 +2892,12 @@ class Robot : public frc::TimedRobot {
       m_motorTopShooter.SetInverted(false);
       m_motorBotShooter.SetSensorPhase(true);
       m_motorBotShooter.SetInverted(false);
-      m_motorLeftSideClimberPole.SetSensorPhase(false);
-      m_motorLeftSideClimberPole.SetInverted(false);
-      m_motorRightSideClimberPole.SetSensorPhase(false);
-      m_motorRightSideClimberPole.SetInverted(false);
+//      m_motorLeftSideClimberPole.SetSensorPhase(false);
+//      m_motorLeftSideClimberPole.SetInverted(false);
+      m_motorLSClimber.SetInverted(false);
+//      m_motorRightSideClimberPole.SetSensorPhase(false);
+//      m_motorRightSideClimberPole.SetInverted(false);
+      m_motorRSClimber.SetInverted(false);
 
   //  m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
   //  m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
@@ -3137,9 +3249,9 @@ class Robot : public frc::TimedRobot {
 
       if ( BUTTON_RUNINTAKE )   {                        // Run intake forward.
          if (  sCurrState.powercellInIntake ) {       // if powercell in intake
-            m_motorIntake.Set( ControlMode::PercentOutput, 0.1 ); // be gentle
+            m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be gentle
          } else {
-            m_motorIntake.Set( ControlMode::PercentOutput, 0.4 ); // be strong
+            m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
          }
                             // If necessary (for any reason), stop the intake.
                                  // if the "RUN INTAKE" button was previously
@@ -3170,8 +3282,10 @@ class Robot : public frc::TimedRobot {
 
 //    RunColorWheel();
 
-      RunClimberPole(  m_motorLeftSideClimberPole );
-      RunClimberPole( m_motorRightSideClimberPole );
+      RunClimberPole( m_motorLSClimber, m_LSClimberForwardLimitSwitch,
+		                        m_LSClimberReverseLimitSwitch );
+      RunClimberPole( m_motorRSClimber, m_RSClimberForwardLimitSwitch,
+		                        m_RSClimberReverseLimitSwitch );
 //    RunClimberWinch();
       SwitchCameraIfNecessary();
 
