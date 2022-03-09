@@ -170,49 +170,49 @@ class Robot : public frc::TimedRobot {
      // index command             (feet)    positive left)  powercell?
      // ----- ----------------     ----     --------        -----
       // index 0: (ballgrabber)
-      {   0,  M_DRIVE_STRAIGHT,     0.5,       0.0,         false },
-      {   1,  M_TURN_RIGHT,         0.0,     -26.0,         false },
-      {   2,  M_DRIVE_STRAIGHT,     0.5,     -30.0,         true  },
-      {   3,  M_TURN_LEFT,          0.0,      20.0,         false },
-      {   4,  M_ROTATE,             0.0,     -10.0,         false },
-                     // will put shoot maneuver here...
+      {   0,  M_DRIVE_STRAIGHT,     2.3,       0.0,         false },
+      {   1,  M_DRIVE_STRAIGHT,     1.0,       0.0,          true },
+      {   2,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
+      {   3,  M_ROTATE,             0.0,    -123.0,         false },
+      {   4,  M_DRIVE_STRAIGHT,     4.687,  -123.0,         false },
       {   5,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {   6,  M_DRIVE_STRAIGHT,     1.0,       0.0,         false },
-      {   7,  M_DRIVE_STRAIGHT,     9.0,       0.0,         true  },
+      {   6,  M_DRIVE_STRAIGHT,     0.5,     -30.0,         true  },
+      {   7,  M_ROTATE,             0.0,     -10.0,         false },
       {   8,  M_STOP,               0.0,       0.0,         false },
+                     // will put shoot maneuver here...
       {   9,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
-      // index 10:
-      {  10,  M_STOP,               0.0,       0.0,         false },
-      {  11,  M_STOP,               0.0,       0.0,         false },
-      {  12,  M_DRIVE_STRAIGHT,     2.0,       0.0,         false },
-      {  13,  M_TURN_LEFT,          0.0,      90.0,         false },
-      {  14,  M_DRIVE_STRAIGHT,     3.0,      90.0,         false },
-      {  15,  M_DRIVE_STRAIGHT,    -3.0,      90.0,         false },
-      {  16,  M_ROTATE,             0.0,     -20.0,         false },
-      {  17,  M_DRIVE_STRAIGHT,     6.0,     -60.0,         false },
-      {  18,  M_TURN_LEFT,          0.0,      90.0,         false },
-      {  19,  M_DRIVE_STRAIGHT,     4.0,      90.0,         false },
-      {  20,  M_STOP,               0.0,       0.0,         false },
-      {  21,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {  22,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {  23,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {  24,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {  25,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {  26,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {  27,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {  28,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {  29,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  10,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  11,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  12,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  13,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  14,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  15,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  16,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  17,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  18,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  19,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
-      // index 30:
-      {  30,  M_DRIVE_STRAIGHT,     5.0,       0.0,         false },
-      {  31,  M_TURN_RIGHT,         0.0,     -26.0,         false },
-      {  32,  M_DRIVE_STRAIGHT,     5.5,     -26.0,         false },
-      {  33,  M_TURN_LEFT,          0.0,      70.0,         false },
-      {  34,  M_DRIVE_STRAIGHT,     5.5,      70.0,         false },
-      {  35,  M_ROTATE,             0.0,       0.0,         false },
-      {  36,  M_DRIVE_STRAIGHT,    11.0,       0.0,         false },
-      {  37,  M_STOP,               0.0,       0.0,         false },
+      // index 20:
+      {  20,  M_DRIVE_STRAIGHT,     1.0,       0.0,         false },
+      {  21,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+//    {  21,  M_DRIVE_STRAIGHT,     1.0,       0.0,          true },
+      {  22,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
+      {  23,  M_ROTATE,             0.0,     360.0,         false },
+      {  24,  M_STOP,               0.0,       0.0,         false },
+      {  25,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  26,  M_DRIVE_STRAIGHT,    -3.0,      90.0,         false },
+      {  27,  M_DRIVE_STRAIGHT,     6.0,     -60.0,         false },
+      {  28,  M_TURN_LEFT,          0.0,      90.0,         false },
+      {  29,  M_DRIVE_STRAIGHT,     4.0,      90.0,         false },
+      {  30,  M_STOP,               0.0,       0.0,         false },
+      {  31,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  32,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  33,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  34,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  35,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  36,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  37,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  38,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  39,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
@@ -934,9 +934,9 @@ class Robot : public frc::TimedRobot {
                     // to get inches along the ground.
                  // (number of Rotations) * (pi) * (wheel diameter in inches) /
                  //  gear ratio
-         double dDistanceDrivenLS = dTotalEncoderRotsLS * ( 3.14159 * 6.0 /
+         double dDistanceDrivenLS = dTotalEncoderRotsLS * ( 3.14159 * 6.25 /
                                                                       10.71 );
-         double dDistanceDrivenRS = dTotalEncoderRotsRS * ( 3.14159 * 6.0 /
+         double dDistanceDrivenRS = dTotalEncoderRotsRS * ( 3.14159 * 6.25 /
                                                                       10.71 );
                   // Calculate the yaw rate.
                   // 24.0 is the width of the robot, in inches.
@@ -1869,7 +1869,7 @@ class Robot : public frc::TimedRobot {
             //             13.88 feet/second with 6" wheels
             //            328.   pounds of driving force (all 4 Neos)
 
-      dDistanceDriven = dTotalRotations * ( 3.1415 * 6.0 / 10.71 / 12.0 );
+      dDistanceDriven = dTotalRotations * ( 3.14159 * 6.25 / 10.71 / 12.0 );
 
                                          // if we haven't driven far enough yet
       if ( std::abs( dDistanceDriven ) < std::abs( desiredDistance ) ) {
@@ -2636,7 +2636,6 @@ class Robot : public frc::TimedRobot {
                                     mSeq.bDivertToPcell,
                                     false );
                                   // If we have driven far enough...
-         bRetVal = true;  // debugging temporary
          if ( bRetVal ) {
             cout << "EM: DriveToDistance completed, heading: ";
             cout << sCurrState.yawPitchRoll[0]  << endl;
@@ -3144,7 +3143,11 @@ class Robot : public frc::TimedRobot {
 
                              // mSeqIndex can be set to different values,
                              // based on the console switches.
-      mSeqIndex = 0;         // ballgrabber sequence (untested)
+      if ( !BUTTON_CARTESIANDRIVE ) {   // if field-oriented switch is not on
+         mSeqIndex =  0;        // A) ballgrabber sequence (untested)
+      } else {
+         mSeqIndex = 20;        // B) ballgrabber sequence (untested)
+      }
       // mSeqIndex =  60;       // barrel sequence (works)
       // mSeqIndex =  80;       // slalom sequence (works)
       // mSeqIndex = 100;       // bounce sequence (works)
