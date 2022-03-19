@@ -8,7 +8,7 @@
                         /* should be removed (not defined) for competition. */
 #define DISP_SMARTDASHBOARD 1  // add smartdashboard tuning displays
 
-// #define VISION_PROCESSING 1
+#define VISION_PROCESSING 1
 
 #ifdef SAFETY_LIMITS
    const double yawRateMax      =   50.0;  // degrees/sec
@@ -104,11 +104,11 @@ class Robot : public frc::TimedRobot {
    WPI_VictorSPX m_motorConveyMaster{ 11 };   // conveyor motor
 
                                                             // CTRE compressor
-// frc::Compressor m_compressor{ 0, frc::PneumaticsModuleType::CTREPCM };
+   frc::Compressor m_compressor{ 0, frc::PneumaticsModuleType::CTREPCM };
 
 // frc::Solenoid m_shiftingSolenoid{ 0, frc::PneumaticsModuleType::CTREPCM, 7};
-// frc::DoubleSolenoid m_flipperSolenoid{ // are the following numbers correct?
-//                                0, frc::PneumaticsModuleType::CTREPCM, 0, 1};
+   frc::DoubleSolenoid m_flipperSolenoid{ // the following numbers are correct.
+                                  0, frc::PneumaticsModuleType::CTREPCM, 4, 6};
 
 // PigeonIMU    pigeonIMU{ 1 };
                                   // ADIS16470 plugged into the MXP (SPI) port
@@ -435,7 +435,9 @@ class Robot : public frc::TimedRobot {
    // double dTimeOfLastCall = 0.0;
    // units::time::second_t dTimeOfLastCall = (units::second_t) 0;
 
-   static constexpr int kLEDStripLength = 60;
+              // Length is 100 here, though there are 300 LEDs on the 5-meter
+	      // because they go in 3-LED sets in the WS2811 strip we have.
+   static constexpr int kLEDStripLength = 100;
    // PWM port 9
    // This must be a PWM header, not MXP or DIO
    frc::AddressableLED m_led{0};
@@ -634,7 +636,7 @@ class Robot : public frc::TimedRobot {
             minCircleRadius = 16;  // was 20         // minimum circle radius
             maxCircleRadius = 46;  // was 56         // maximum circle radius
             bDiagnosticMode = !bDiagnosticMode;       // toggle diagnostic mode
-            cout << "mel says diagnostic mode was changed" <<endl;
+            cout << "liv says diagnostic mode was changed" <<endl;
             cout << bDiagnosticMode <<endl; 
          }
 
@@ -1232,11 +1234,11 @@ class Robot : public frc::TimedRobot {
       double RSMasterOutput = 0.0;
       // m_drive.StopMotor();
 #ifdef SAFETY_LIMITS
-                           // for safety: allow limited range only -0.4 to 0.4
-      desiredForward = std::min(  0.2, desiredForward );
-      desiredTurn    = std::min(  0.2, desiredTurn  );
-      desiredForward = std::max( -0.2, desiredForward );
-      desiredTurn    = std::max( -0.2, desiredTurn  );
+                           // for safety: allow limited range only -0.5 to 0.5
+      desiredForward = std::min(  0.5, desiredForward );
+      desiredTurn    = std::min(  0.5, desiredTurn  );
+      desiredForward = std::max( -0.5, desiredForward );
+      desiredTurn    = std::max( -0.5, desiredTurn  );
 #else
                            // safety mode off: allow full range of -1.0 to 1.0
       desiredForward = std::min(  1.0, desiredForward );
@@ -2212,8 +2214,8 @@ class Robot : public frc::TimedRobot {
          } else if ( BUTTON_CONVEYORBACKWARD ) {     // Run conveyor backward.
             sCurrState.iConveyPercent =  80;
             m_motorConveyMaster.Set( ControlMode::PercentOutput,  0.8 );
-            sCurrState.iIntakePercent = -40;     // Run intake backwards, too.
-            m_motorIntake.Set( ControlMode::PercentOutput, -0.4 );
+            //sCurrState.iIntakePercent = -40;   // Run intake backwards, too.
+            //m_motorIntake.Set( ControlMode::PercentOutput, -0.4 );
          } else {                                         // Stop the conveyor.
            sCurrState.iConveyPercent = 0;
            if (BUTTON_CONVEYORFORWARD_PREV||BUTTON_CONVEYORBACKWARD_PREV) {
@@ -2264,8 +2266,10 @@ class Robot : public frc::TimedRobot {
       if ( !BUTTON_EXTENDCOLORWHEEL_PREV && BUTTON_EXTENDCOLORWHEEL ) {
          if ( bFlipperState ){
             m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kForward);
+            cout << "FIRST HALF";
          } else {
             m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kReverse);
+            cout << "SECOND";
          }
          bFlipperState = !bFlipperState; 
       }
@@ -2305,7 +2309,7 @@ class Robot : public frc::TimedRobot {
             m_motorClimberPole.Set( 0.10 );
          } else {
                                                    // apply full climbing power
-            m_motorClimberPole.Set( 0.4 );
+            m_motorClimberPole.Set( 0.95 );
 	    if ( m_ClimberForwardLimitSwitch.Get() ) {
                limitSwitchHasBeenHit = true;
             }
@@ -2949,7 +2953,8 @@ class Robot : public frc::TimedRobot {
       // new m_compressor(0);           // initialize compressor
       // new m_compressor = frc::Compressor(0); // initialize compressor
 
-      // Default to a length of 60 LEDs; start with empty output
+      // Default to a length of 100 LEDs (300 total; 100 sets of 3);
+      // start with empty output on all of them.
       // length is expensive to set, so only set it once, then just update data
       m_led.SetLength( kLEDStripLength );
       m_led.SetData( m_ledBuffer );
@@ -3060,7 +3065,21 @@ class Robot : public frc::TimedRobot {
       static int color=0;
       // for every pixel...
       for ( int i = 0; i < kLEDStripLength; i++ ) {
-         if ( i == color/3 ) {
+         // int iabs = ( 179 * abs(50 - i) ) / 50;
+         if ( ( 40 < i ) && ( i < 59 ) ) {         // if LEDs facing intake
+            if ( WeAreOnRedAlliance ) {
+               m_ledBuffer[i].SetRGB( 255, 0, 0 ); // fully-saturated pure red
+            } else {
+               m_ledBuffer[i].SetRGB( 0, 0, 255); // fully-saturated pure blue
+            }
+	 } else if ( ( 33 < i ) && ( i < 66 ) ) {  // LEDs curving up to top
+            // m_ledBuffer[iabs].SetHSV( i*3, 255, 16 );
+            m_ledBuffer[i].SetHSV( i*3, 255, 16 );
+	 } else if ( ( 30 < i ) && ( i < 69 ) ) { // LEDs curving down from top
+            m_ledBuffer[i].SetHSV( i*3, 255, 16 );
+	 } else if ( ( 17 < i ) && ( i < 82 ) ) { // out to tip of aft tentacle
+            m_ledBuffer[i].SetHSV( i*3, 255, 16 );
+	 } else if ( i == color/3 ) {
               // set the value
             m_ledBuffer[i].SetHSV( color, 255, 128 );
          } else {
@@ -3121,7 +3140,7 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void AutonomousInit() override {
       RobotInit();
-//    m_compressor.EnableDigital();
+      m_compressor.EnableDigital();
       limenttable->PutNumber( "ledMode", 3 );                   // turn LEDs on
       cout << "shoot 3 balls" << endl;
       // m_drive.StopMotor();
@@ -3214,7 +3233,7 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void TeleopInit() override {
       RobotInit();
-//    m_compressor.EnableDigital();
+      m_compressor.EnableDigital();
                                                     // zero the drive encoders
   //  m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
   //  m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
@@ -3239,6 +3258,7 @@ class Robot : public frc::TimedRobot {
       /* is in Teleop mode.                                                  */
       /*---------------------------------------------------------------------*/
    void TeleopPeriodic() override {
+      static bool bFlipperState = false;
 
       GetAllVariables();  // this is necessary if we use any Canbus variables.
       AdjustJoystickValues();  // adjust for joystick deadband and sensitivity
@@ -3273,7 +3293,16 @@ class Robot : public frc::TimedRobot {
                   ( !BUTTON_MANUALCONVEYOR || ! BUTTON_CONVEYORBACKWARD ) ) {
             sCurrState.iIntakePercent = 0;            // Then stop the intake.
             m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
-      } 
+      } else  if ( !BUTTON_EXTENDCOLORWHEEL_PREV && BUTTON_EXTENDCOLORWHEEL ) {   //to mess with
+         if ( bFlipperState ){
+            m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kForward);
+            cout << "FIRST HALF";
+         } else {
+            m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kReverse);
+            cout << "SECOND";
+         }
+         bFlipperState = !bFlipperState; 
+      }
 
       RunDriveMotors();
 
@@ -3297,7 +3326,8 @@ class Robot : public frc::TimedRobot {
          // cout << frc::GetTime() - dTimeOfLastCall << endl;
                // use frc:Timer::GetFPGATimestamp() instead?
       }
-      LEDAllianceColor();         // light the entire LED strip blue
+      // LEDAllianceColor();         // light the entire LED strip blue or red
+      LEDTest();       // Alliance color at intake, rainbow everywhere else
 
       iCallCount++;
    }      // TeleopPeriodic()
