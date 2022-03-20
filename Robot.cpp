@@ -77,8 +77,6 @@ class Robot : public frc::TimedRobot {
          // https://github.com/REVrobotics/SPARK-MAX-Examples/blob/master/
          //         C%2B%2B/Arcade%20Drive%20With%20CAN/src/main/cpp/Robot.cpp
 
-         // After checking with Olivia: the following CAN IDs are correct.
-         // (even the ones that are commented out).
    static const int LSMasterDeviceID = 15;
    static const int LSFollowDeviceID = 14;
    static const int RSMasterDeviceID = 10;
@@ -106,13 +104,11 @@ class Robot : public frc::TimedRobot {
                                                             // CTRE compressor
    frc::Compressor m_compressor{ 0, frc::PneumaticsModuleType::CTREPCM };
 
-// frc::Solenoid m_shiftingSolenoid{ 0, frc::PneumaticsModuleType::CTREPCM, 7};
-   frc::DoubleSolenoid m_flipperSolenoid{ // the following numbers are correct.
+   frc::DoubleSolenoid m_flipperSolenoid{
                                   0, frc::PneumaticsModuleType::CTREPCM, 4, 6};
 
 // PigeonIMU    pigeonIMU{ 1 };
-                                  // ADIS16470 plugged into the MXP (SPI) port
-   frc::ADIS16470_IMU gyro;
+   frc::ADIS16470_IMU gyro;        // ADIS16470 plugged into the MXP (SPI) port
 
    frc::DigitalInput conveyorDIO0{0};
    frc::DigitalInput conveyorDIO1{1};
@@ -129,7 +125,7 @@ class Robot : public frc::TimedRobot {
    std::shared_ptr<nt::NetworkTable> limenttable =
                nt::NetworkTableInstance::GetDefault().GetTable( "limelight" );
 
-                  // create a list of maneuver types
+                                            // create a list of maneuver types
    enum MANEUVER_TYPE {
       M_STOP           = 0,
       M_DRIVE_STRAIGHT = 1,  // drive straight on a specified yaw direction
@@ -150,7 +146,7 @@ class Robot : public frc::TimedRobot {
       enum MANEUVER_TYPE type;       // type of maneuver (stop, turn, etc.)
       double             distance;   // distance in feet
       double             yaw;        // yaw angle in degrees
-      bool               bDivertToPcell;  // if true, divert to a powercell
+      bool               bDivertToCargo;  // if true, divert to a cargo ball
                                           // if one is seen by the videocamera
    };
 
@@ -167,9 +163,9 @@ class Robot : public frc::TimedRobot {
      //
      //                                    yaw (heading)    divert
      //                          distance  (degrees,          to
-     // index command             (feet)    positive left)  powercell?
+     // index command             (feet)    positive left)  cargo ball?
      // ----- ----------------     ----     --------        -----
-      // index 0: (ballgrabber)
+      // index 0: (5-ball autonomous ballgrabber/shooter sequence)
       {   0,  M_DRIVE_STRAIGHT,     2.3,       0.0,         false },
       {   1,  M_DRIVE_STRAIGHT,     1.0,       0.0,          true },
       {   2,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
@@ -193,7 +189,7 @@ class Robot : public frc::TimedRobot {
       {  18,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  19,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
-      // index 20:
+      // index 20: (simple autonomous "drive, grab cargo, shoot" sequence)
       {  20,  M_DRIVE_STRAIGHT,     1.0,       0.0,         false },
       {  21,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 //    {  21,  M_DRIVE_STRAIGHT,     1.0,       0.0,          true },
@@ -346,8 +342,8 @@ class Robot : public frc::TimedRobot {
                                // (left-positive).  Necessary because the gyro
                                // only updates every 0.1 second (5 ticks).
       double initialYaw;
-      bool   powercellInIntake;
-      bool   powercellInPosition5;
+      bool   cargoInIntake;
+      bool   cargoInPosition5;
       bool   highGear;
       bool   teleop;
    } sCurrState, sPrevState;
@@ -435,18 +431,16 @@ class Robot : public frc::TimedRobot {
    // double dTimeOfLastCall = 0.0;
    // units::time::second_t dTimeOfLastCall = (units::second_t) 0;
 
-              // Length is 100 here, though there are 300 LEDs on the 5-meter
-              // because they go in 3-LED sets in the WS2811 strip we have.
+       // Length is 100 here, though there are 300 LEDs on the 5-meter strip,
+       // because they are arranged in 3-LED sets in the WS2811 strip we have.
    static constexpr int kLEDStripLength = 100;
    static constexpr int kNumLEDBufs = 4;
-   // PWM port 9
-   // This must be a PWM header, not MXP or DIO
-   frc::AddressableLED m_led{0};
+   frc::AddressableLED m_led{0};  // PWM port 0 (do not connect to MXP or DIO)
    std::array<frc::AddressableLED::LEDData, kLEDStripLength>
            m_ledBuffer;  // Reuse the buffer
    std::array<frc::AddressableLED::LEDData, kLEDStripLength>
            m_ledBufferArr[kNumLEDBufs];  // Array of LED buffers
-   // Store what the last hue of the first pixel is:
+                             // Store what the last hue of the first pixel is:
    int firstLEDStripPixelHue = 0;
 
       // NOTE: Because of reports of the Roborio locking up sometimes when I2C
@@ -457,7 +451,7 @@ class Robot : public frc::TimedRobot {
                               // I2C port for the Rev Robotics V3 color sensor
   // static constexpr auto i2cPort = frc::I2C::Port::kOnboard;
 
-  /**
+  /*
    * A Rev Color Sensor V3 object is constructed with an I2C port as a 
    * parameter. The device will be automatically initialized with default 
    * parameters.
@@ -506,30 +500,29 @@ class Robot : public frc::TimedRobot {
 
  public:
 
-   // static bool WeAreOnRedAlliance = true;
    static bool WeAreOnRedAlliance;
 
-   static struct sPowercellOnVideo {
+   static struct sCargoOnVideo {
       bool SeenByCamera;
       int  X;
       int  Y;
       int  Radius;
       bool SwitchToColorWheelCam;
       bool TestMode;
-   } powercellOnVideo;
+   } cargoOnVideo;
 
  private:
-                 /* limelight variables: x: offset from centerline,         */
-                 /*                      y: offset from centerline,         */
-                 /*                      a: area of target, % (0-100),      */
-                 /*                      v: whether the data is valid,      */
-                 /*                      s: skew or rotation, deg (-90-0).  */
+              /* limelight variables: x: offset from vertical centerline,   */
+              /*                      y: offset from horizontal centerline, */
+              /*                      a: area of target, % (0-100),         */
+              /*                      v: whether the data is valid,         */
+              /*                      s: skew or rotation, deg (-90-0).     */
    double limex, limey, limea, limev, limes;
 
 #ifdef VISION_PROCESSING
       /*---------------------------------------------------------------------*/
       /* VisionThread()                                                      */
-      /* This function executes as a separate thread, to take 640x480-pixel  */
+      /* This function executes as a separate thread, to take 320x240-pixel  */
       /* video frames from the USB video camera, change to grayscale,        */
       /* and send to the DriverStation. It is documented here:               */
       /* https://docs.wpilib.org/en/latest/docs/software/vision-processing/  */
@@ -564,12 +557,12 @@ class Robot : public frc::TimedRobot {
       cs::UsbCamera camera2 = frc::CameraServer::StartAutomaticCapture(0);
       camera2.SetResolution( 320, 240 );
 
-      powercellOnVideo.SeenByCamera = false;  // Make sure no other code thinks
-      powercellOnVideo.X = 0;                 // we see a powercell until we
-      powercellOnVideo.Y = 0;                 // actually see one!
-      powercellOnVideo.Radius = -1;
-      powercellOnVideo.SwitchToColorWheelCam = false;
-      powercellOnVideo.TestMode = false;
+      cargoOnVideo.SeenByCamera = false;  // Make sure no other code thinks
+      cargoOnVideo.X = 0;                 // we see a cargo ball until we
+      cargoOnVideo.Y = 0;                 // actually see one!
+      cargoOnVideo.Radius = -1;
+      cargoOnVideo.SwitchToColorWheelCam = false;
+      cargoOnVideo.TestMode = false;
 
       cs::CvSink cvSink = frc::CameraServer::GetVideo();
       cs::CvSource outputStreamStd =
@@ -596,7 +589,7 @@ class Robot : public frc::TimedRobot {
 
           // jag; 08jan2022: 30/65 are good values for a yellow ball like
           // the 7" powercell in 2020 and 2021 -- but for 2022 we must
-          // determine good values for a red (2/29?) or a blue (180/230?) ball,
+          // determine good values for a red (170-40) or a blue (80-120) ball,
           // then add initialization code to switch to the red or blue values
           // depending on which alliance we are on for each match.
           // And don't forget to check under different lighting conditions!
@@ -622,18 +615,18 @@ class Robot : public frc::TimedRobot {
          static int iFrameCount = 0;
          static int iLoopCount  = 0;
 
-         if ( powercellOnVideo.SwitchToColorWheelCam &&
+         if ( cargoOnVideo.SwitchToColorWheelCam &&
               !prevSwitchToColorWheelCam ) {
-            cvSink.SetSource( camera2 );       // switch to color wheel camera
-            prevSwitchToColorWheelCam = powercellOnVideo.SwitchToColorWheelCam;
+            cvSink.SetSource( camera2 );       // switch to rear "goal" camera
+            prevSwitchToColorWheelCam = cargoOnVideo.SwitchToColorWheelCam;
                                    // This camera has a wide field of view, so
                                    // the circles will be small
             minCircleRadius = 10;  // was 20         // minimum circle radius
             maxCircleRadius = 40;  // was 56         // maximum circle radius
-         } else if ( !powercellOnVideo.SwitchToColorWheelCam &&
+         } else if ( !cargoOnVideo.SwitchToColorWheelCam &&
                      prevSwitchToColorWheelCam ) {
-            cvSink.SetSource( camera );     // switch back to powercell camera
-            prevSwitchToColorWheelCam = powercellOnVideo.SwitchToColorWheelCam;
+            cvSink.SetSource( camera ); // switch back to front "cargo" camera
+            prevSwitchToColorWheelCam = cargoOnVideo.SwitchToColorWheelCam;
                                   // This camera has a narrow field of view, so
                                   // the circles will be larger
             minCircleRadius = 16;  // was 20         // minimum circle radius
@@ -647,7 +640,7 @@ class Robot : public frc::TimedRobot {
          if ( bDiagnosticMode ) {
             pOutput = &threshImg;   // diagnostic image (shows where yellow is,
                                     //                         or red or blue))
-         } else if ( powercellOnVideo.SwitchToColorWheelCam ) {
+         } else if ( cargoOnVideo.SwitchToColorWheelCam ) {
             // pOutput = &output;         // gray-scale image, for low latency
             pOutput = &source;          // full-color, direct from videocamera
          } else {
@@ -759,17 +752,17 @@ class Robot : public frc::TimedRobot {
                             // Convert X and Y positions so 0,0 is at center of
                             // camera image, with X increasing to the right and
                             // Y increasing up.
-               powercellOnVideo.X = (int)v3fCircles[iBiggestCircleIndex][0] -
+               cargoOnVideo.X = (int)v3fCircles[iBiggestCircleIndex][0] -
                                                          (int)threshImg.cols/2;
-               powercellOnVideo.Y = (int)threshImg.rows/2 -
+               cargoOnVideo.Y = (int)threshImg.rows/2 -
                                        (int)v3fCircles[iBiggestCircleIndex][1];
-               powercellOnVideo.Radius = iBiggestCircleRadius;
-               powercellOnVideo.SeenByCamera = true;
+               cargoOnVideo.Radius = iBiggestCircleRadius;
+               cargoOnVideo.SeenByCamera = true;
             } else {
-               powercellOnVideo.SeenByCamera = false;
+               cargoOnVideo.SeenByCamera = false;
             }
 
-            if ( powercellOnVideo.TestMode ) {              // if in Test Mode
+            if ( cargoOnVideo.TestMode ) {                  // if in Test Mode
                            // display the H/S/V values every couple of seconds
                if ( 0 == iFrameCount%30 ) {
                   std::cout << "Center pixel H/S/V: ";
@@ -802,7 +795,7 @@ class Robot : public frc::TimedRobot {
             v3fCircles.clear();
 
          } // if we got an image
-         if ( 0 == iLoopCount%50 ) {   // every few seconds, check if we
+         if ( 0 == iLoopCount%100 ) {  // every few seconds, check if we
                                        // are still on the same alliance
             if ( frc::DriverStation::kRed ==
                                           frc::DriverStation::GetAlliance() ) {
@@ -836,14 +829,14 @@ class Robot : public frc::TimedRobot {
       if ( !BUTTON_SWITCHCAMERA_PREV &&
             BUTTON_SWITCHCAMERA         ) {
 
-         powercellOnVideo.SwitchToColorWheelCam =
-                   !powercellOnVideo.SwitchToColorWheelCam;
+         cargoOnVideo.SwitchToColorWheelCam =
+                   !cargoOnVideo.SwitchToColorWheelCam;
 
          cout << "Switching camera to ";
-         if ( powercellOnVideo.SwitchToColorWheelCam ) {
-            cout << "ColorWheelCam" << endl;
+         if ( cargoOnVideo.SwitchToColorWheelCam ) {
+            cout << "GoalCam" << endl;
          } else {
-            cout << "PowercellCam" << endl;
+            cout << "CargoCam" << endl;
          }
       }
    }
@@ -908,8 +901,8 @@ class Robot : public frc::TimedRobot {
       sCurrState.yawPitchRoll[1] = (double)gyro.GetRate();
       sCurrState.rateXYZ[2]      = (double)sCurrState.yawPitchRoll[1];
 
-               // Has the gyro rate updated? (the Pigeon only updates every
-               // 0.1 second; we don't know how often the ADIS gyro updates)
+               // Has the gyro rate updated? (the Pigeon and the ADIS gyro
+               // only update every 0.1 second).
       if ( sPrevState.rateXYZ[2] != sCurrState.rateXYZ[2] ) {
                             // yes; record actual value (correct our estimate)
          sCurrState.yawRateEstimate = sCurrState.rateXYZ[2];
@@ -969,7 +962,8 @@ class Robot : public frc::TimedRobot {
          }
       }  // else the gyro didn't update the yaw rate
 
-           // Has the gyro position updated? (it only updates every 0.1 second)
+          // Has the gyro position updated? Like the yaw rate (handled above),
+	  // the gyro also only updates yaw position every 0.1 second.
       if ( sPrevState.yawPitchRoll[0] != sCurrState.yawPitchRoll[0] ) {
                             // yes; record actual value (correct our estimate)
          sCurrState.yawPosnEstimate = sCurrState.yawPitchRoll[0];
@@ -983,12 +977,12 @@ class Robot : public frc::TimedRobot {
          sCurrState.yawPosnEstimate += sCurrState.yawRateEstimate * 0.02;
       }
 
-                  // Record the positions of powercells in the conveyor system.
-                  // The Digital I/O (DIO) connections are made to IR sensors,
-                  // which return false if the IR beam is blocked (which means
-                  // there is a powercell there) -- so we invert them here. 
-      sCurrState.powercellInPosition5 = !conveyorDIO0.Get();
-      sCurrState.powercellInIntake    = !conveyorDIO1.Get();
+                 // Record the positions of cargo balls in the conveyor system.
+                 // The Digital I/O (DIO) connections are made to IR sensors,
+                 // which return false if the IR beam is blocked (which means
+                 // there is a cargo ball there) -- so we invert them here. 
+      sCurrState.cargoInPosition5 = !conveyorDIO0.Get();
+      sCurrState.cargoInIntake    = !conveyorDIO1.Get();
 
       limev = limenttable->GetNumber("tv",0.0);  // valid
       limex = limenttable->GetNumber("tx",0.0);  // x position
@@ -1366,8 +1360,8 @@ class Robot : public frc::TimedRobot {
          if ( abs( desiredHeading - sCurrState.yawPosnEstimate ) < 20.0 ) {
             DriveToDistance( desiredHeading,       // heading in degrees
                              desiredSpeed * 4.0,   // distance in feet,
-                             false,          // whether to divert to powercell
-                             true  );        // whether to initialize distance
+                             false,         // whether to divert to cargo ball
+                             true  );       // whether to initialize distance
          } else {
                                               // (handle initialization later)
             TurnToHeading( desiredHeading, false );
@@ -1394,7 +1388,7 @@ class Robot : public frc::TimedRobot {
               // forward, and positive joyX is to the right.
               // (Or in Cartesian, field-oriented drive mode:
               //    positive joyY is toward the 0-degree direction, and
-              //    positive joyX is toward the to the right
+              //    positive joyX is toward the right
               //                                (the 270-degree direction) ).
 
       if ( BUTTON_CARTESIANDRIVE ) {
@@ -1494,18 +1488,14 @@ class Robot : public frc::TimedRobot {
          // May have to add/subtract a constant from limex here, to account
          // for the offset of the camera away from the centerline of the robot.
          if ( aBooleanVariable ) {
-            // m_drive.CurvatureDrive( -autoDriveSpeed, 0, 0 );
             Team4918Drive( -autoDriveSpeed, 0.0 );
          } else if ( 0 <= limex )  {
                              // if target to the right, turn towards the right
-            // m_drive.CurvatureDrive( -autoDriveSpeed, -(limex/30.0), 1 );
-            Team4918Drive( -autoDriveSpeed, -(limex/30.0) );
+            Team4918Drive( -autoDriveSpeed, (limex/30.0) );
          } else if ( limex < 0 ) {
                                // if target to the left, turn towards the left
-            // m_drive.CurvatureDrive( -autoDriveSpeed, -(limex/30.0), 1 );
-            Team4918Drive( -autoDriveSpeed, -(limex/30.0) );
+            Team4918Drive( -autoDriveSpeed, (limex/30.0) );
          } else {
-            // m_drive.CurvatureDrive( -autoDriveSpeed, 0, 0 );
             Team4918Drive( -autoDriveSpeed, 0.0 );
          }
 
@@ -1530,64 +1520,62 @@ class Robot : public frc::TimedRobot {
 
 
       /*---------------------------------------------------------------------*/
-      /* DriveToPowercell()                                                  */
-      /* DriveToPowercell() drives autonomously towards a vision target.     */
-      /* It returns true if the usb vision data has detected a power cell,   */
+      /* DriveToCargo()                                                      */
+      /* DriveToCargo() drives autonomously towards a vision target.         */
+      /* It returns true if the usb vision data has detected a cargo ball,   */
       /* false otherwise.                                                    */
       /*---------------------------------------------------------------------*/
-   bool DriveToPowercell()  {
+   bool DriveToCargo()  {
 
       bool returnVal = true;
       static int  iCallCount = 0;
 
       iCallCount++;
-      if (  sCurrState.powercellInIntake ) {       // if powercell in intake
+      if (  sCurrState.cargoInIntake ) {          // if cargo ball in intake
          m_motorIntake.Set( ControlMode::PercentOutput,  1.0 ); // be gentle
       } else {
          m_motorIntake.Set( ControlMode::PercentOutput,  1.0 ); // be strong
       }
       RunConveyor();
 
-      if ( powercellOnVideo.SeenByCamera ) {      // if USB video data is valid
+      if ( cargoOnVideo.SeenByCamera ) {          // if USB video data is valid
          double autoDriveSpeed;
-             // jag; 08jan2022: should change these comments to say we may have
-             // found a "red" or "blue" cargo rather than a yellow powercell.
-             // If powercellOnVideo.SeenByCamera is true, that means that the
-             // vision-processing code in VisionThread() has found a yellow
+             // If cargoOnVideo.SeenByCamera is true, that means that the
+             // vision-processing code in VisionThread() has found a red/blue
              // circle in the latest video frame from the USB videocamera (and
-             // we hope that yellow circle is a powercell).
-             // powercellOnVideo.Y is the Y-position in the video frame of the
-             //    powercell; the range is from -120 to +120 (pixels).
-             // powercellOnVideo.X is the X-position in the video frame of the
-             //    powercell; the range is from -160 to +160 (pixels).
-             // powercellOnVideo.Radius is the radius of the powercell;
+             // we hope that red/blue circle is a cargo ball).
+             // cargoOnVideo.Y is the Y-position in the video frame of the
+             //    cargo ball; the range is from -120 to +120 (pixels).
+             // cargoOnVideo.X is the X-position in the video frame of the
+             //    cargo ball; the range is from -160 to +160 (pixels).
+             // cargoOnVideo.Radius is the radius of the cargo ball;
              //    the range is from 20 to 70 (pixels).
-             // In the code below, we use those powercellOnVideo values to
+             // In the code below, we use those cargoOnVideo values to
              // determine how fast and in which direction to drive, to go
-             // towards the powercell.
-             // We could change the if/else statements below to calculate
+             // towards the cargo ball.
+             // We should change the if/else statements below to calculate
              // autoDriveSpeed by using a math expression based on
-             // powercellOnVideo.Y values.
+             // cargoOnVideo.Y values.
              // jag; 22mar2021: all these values have been changed; it may be
              // useful to compare with the original working code in
              // ~/Desktop/2020-Robot/Robot.cpp
 #ifdef JAG_SAFEMODE
-         if        ( powercellOnVideo.Y < -50 ) {  // if we're super close
+         if        ( cargoOnVideo.Y < -50 ) {  // if we're super close
             autoDriveSpeed = -0.35;   //   go backward slowly
-         } else if ( powercellOnVideo.Y < -30 ) {  // if we're super close
+         } else if ( cargoOnVideo.Y < -30 ) {  // if we're super close
             autoDriveSpeed = -0.25;   //   go backward slowly
-            autoDriveSpeed = -0.35 * float( - 30 - powercellOnVideo.Y ) / 20.0;
-         } else if ( powercellOnVideo.Y < 0 )   { // if we're really close...
+            autoDriveSpeed = -0.35 * float( - 30 - cargoOnVideo.Y ) / 20.0;
+         } else if ( cargoOnVideo.Y < 0 )   { // if we're really close...
             autoDriveSpeed = 0.0;     //   stop (or 0.08 to go slow)
-         } else if ( powercellOnVideo.Y <  20 ) {  // if we're a little farther
+         } else if ( cargoOnVideo.Y <  20 ) {  // if we're a little farther
 #else
-         if ( powercellOnVideo.Y < 0 )   { // if we're really close...
+         if ( cargoOnVideo.Y < 0 )   { // if we're really close...
 #endif
             autoDriveSpeed = 0.35;    //   go a little faster
-            // autoDriveSpeed = 0.20 * float( powercellOnVideo.Y ) / 20.0;
-         } else if (  powercellOnVideo.Y < 40 ) {  // if we're farther still...
+            // autoDriveSpeed = 0.20 * float( cargoOnVideo.Y ) / 20.0;
+         } else if (  cargoOnVideo.Y < 40 ) {  // if we're farther still...
             autoDriveSpeed = 0.40;    //   go a little faster still
-            // autoDriveSpeed = 0.20 + 0.20 * float( powercellOnVideo.Y - 20 ) / 40.0;
+            // autoDriveSpeed = 0.20 + 0.20 * float( cargoOnVideo.Y - 20 ) / 40.0;
          } else {                     // else we must be really far...
             autoDriveSpeed = 0.45;    //   go as fast as we dare
          }
@@ -1598,23 +1586,17 @@ class Robot : public frc::TimedRobot {
 
          // May have to add/subtract a constant from x-values here, to account
          // for the offset of the camera away from the centerline of the robot.
-         if        ( 50 <= powercellOnVideo.X ) {
+         if        ( 50 <= cargoOnVideo.X ) {
                              // if target to the right, turn towards the right
-            //m_drive.CurvatureDrive( -autoDriveSpeed,
-            //                        -sqrt((powercellOnVideo.X/300.0)), 1 );
             Team4918Drive( autoDriveSpeed/1.5,
-                           powercellOnVideo.X/500.0 );
-                           // sqrt(powercellOnVideo.X/400.0)/2 );
-         } else if ( powercellOnVideo.X < -50 ) {
+                           cargoOnVideo.X/500.0 );
+                           // sqrt(cargoOnVideo.X/400.0)/2 );
+         } else if ( cargoOnVideo.X < -50 ) {
                                // if target to the left, turn towards the left
-            //m_drive.CurvatureDrive( -autoDriveSpeed,
-            //                        sqrt((-powercellOnVideo.X/300.0)), 1 );
             Team4918Drive( autoDriveSpeed/1.5,
-                           powercellOnVideo.X/500.0 );
-                           // -sqrt(-powercellOnVideo.X/400.0)/2 );
+                           cargoOnVideo.X/500.0 );
+                           // -sqrt(-cargoOnVideo.X/400.0)/2 );
          } else {
-            //m_drive.CurvatureDrive( -autoDriveSpeed, 0, 0 );
-
             Team4918Drive( autoDriveSpeed/1.5, 0.0 ); // drive straight forward
          }
 
@@ -1623,19 +1605,19 @@ class Robot : public frc::TimedRobot {
             sCurrState.joyY = 0.3;    // then simulate some joystick settings
             sCurrState.joyX = 0.0;
          }
-         DriveByJoystick();   // No powercell seen; drive according to joystick
+         DriveByJoystick(); // No cargo balls seen; drive according to joystick
          returnVal = false;
       }
 
       if ( 0 == iCallCount%100 )  {
-         cout << "Powercell Seen flag " << powercellOnVideo.SeenByCamera <<
-                 ": " << powercellOnVideo.X << "/" << powercellOnVideo.Y;
-         cout << ", " << powercellOnVideo.Radius  << "." << endl;
+         cout << "Cargo Seen flag " << cargoOnVideo.SeenByCamera <<
+                 ": " << cargoOnVideo.X << "/" << cargoOnVideo.Y;
+         cout << ", " << cargoOnVideo.Radius  << "." << endl;
       }
 
       return returnVal;
 
-   }  /* DriveToPowercell() */
+   }  /* DriveToCargo() */
 
 
       /*---------------------------------------------------------------------*/
@@ -1647,9 +1629,6 @@ class Robot : public frc::TimedRobot {
    bool RunDriveMotors( void ) {
       static int iCallCount = 0;
       iCallCount++;
-
-      //m_shiftingSolenoid.Set(true);     // high gear?
-      //m_shiftingSolenoid.Set(false);    // low gear?
 
       motorFindMinMaxVelocitySpark( m_LSMasterEncoder, LSMotorState );
       motorFindMinMaxVelocitySpark( m_RSMasterEncoder, RSMotorState );
@@ -1675,7 +1654,7 @@ class Robot : public frc::TimedRobot {
 
                                       /* Button 1 is the trigger button on  */
                                       /* the front of the joystick.         */
-                                      /* (drive to target; either powercell */
+                                      /* (drive to target; either cargo     */
                                       /* or limelight target)               */
                                       /* Button 2 is the bottom button on   */
                                       /* the rear of the joystick.          */
@@ -1685,11 +1664,11 @@ class Robot : public frc::TimedRobot {
                                        // ("trigger: drive-to-a-target")
                                        // but not button 2
                                        // ("drive in reverse direction),
-                                       // and a powercell is visible
+                                       // and a cargo ball is visible
       if ( ( BUTTON_TARGET ) && ( !BUTTON_REVERSE ) &&
-           ( powercellOnVideo.SeenByCamera ) ) { 
+           ( cargoOnVideo.SeenByCamera ) ) { 
 
-         DriveToPowercell();  // then autonomously drive towards the powercell
+         DriveToCargo();     // then autonomously drive towards the cargo ball
 
                                        // If driver is pressing button one
                                        // ("trigger: drive-to-a-target")
@@ -1819,22 +1798,22 @@ class Robot : public frc::TimedRobot {
       /*    direction the robot was facing when first powered up; it is not  */
       /*    limited to the normal 0-360 degree range.                        */
       /* desiredDistance is a parameter, in feet; positive is in the         */
-      /*    "forward" direction (toward the powercell-sucking side of        */
+      /*    "forward" direction (toward the cargo-sucking side of            */
       /*    the robot).                                                      */
-      /* bDivertToPowercell is a boolean that tells the function to ignore   */
-      /*    the specified heading and drive toward a powercell instead,      */
+      /* bDivertToCargo is a boolean that tells the function to ignore       */
+      /*    the specified heading and drive toward a cargo ball instead,     */
       /*    if one is seen by the vision-processing thread.                  */
       /* bInit is a boolean that tells the function to initialize (to record */
       /*    the current position as the starting position).                  */
       /* This function returns false if the distance has not been reached    */
       /* yet, and returns true when the distance has been reached.           */
       /* It also returns true if it has been told to drive toward a          */
-      /* powercell (bDivertToPowercell is true) and a powercell is in the    */
-      /* intake ( sCurrState.powercellInIntake is true ).                    */
+      /* cargo ball (bDivertToCargo is true) and a cargo ball is in the      */
+      /* intake ( sCurrState.cargoInIntake is true ).                        */
       /*---------------------------------------------------------------------*/
    bool DriveToDistance( double desiredYaw,
                          double desiredDistance,
-                         bool   bDivertToPowercell,
+                         bool   bDivertToCargo,
                          bool   bInit            ) {
       static bool bReturnValue = true;
       static double dTotalRotations = 0.0;
@@ -1910,54 +1889,54 @@ class Robot : public frc::TimedRobot {
              // turn, we can be more aggressive in starting the turn:
          dDesiredTurn = ( dEventualYawPosition - desiredYaw ) * 1.0/50.0;
          
-         if ( !bDivertToPowercell ) { // if we are ignoring powercells (we've
-                                      // been told NOT to divert to powercells)
+         if ( !bDivertToCargo ) {     // if we are ignoring cargo balls (we've
+                                      // been told NOT to divert to cargo)
             // then just drive (don't change dDesiredxxx values)
 
-                    // else (we've been told to divert to powercells when seen)
-                    // if a powercell is seen
-         } else if ( powercellOnVideo.SeenByCamera ) {
-                 // Then drive toward the powercell, by setting dDesiredSpeed
+                   // else (we've been told to divert to cargo balls when seen)
+                   // if a cargo ball is seen
+         } else if ( cargoOnVideo.SeenByCamera ) {
+                 // Then drive toward the cargo ball, by setting dDesiredSpeed
                  // and dDesiredTurn, based on the X,Y coordinates of the
-                 // powercell in the camera view.
-                 // powercellOnVideo.Y is the Y-position in the video frame of
-                 // the powercell; the range is from -120 to +120 (pixels).
-                 // powercellOnVideo.X is the X-position in the video frame of
-                 // the powercell; the range is from -160 to +160 (pixels).
+                 // cargo ball in the camera view.
+                 // cargoOnVideo.Y is the Y-position in the video frame of
+                 // the cargo ball; the range is from -120 to +120 (pixels).
+                 // cargoOnVideo.X is the X-position in the video frame of
+                 // the cargo ball; the range is from -160 to +160 (pixels).
                  // (0,0) is right in the center of the field of view, with
                  // X increasing to the right, and Y increasing down towards
                  // the robot.
                  // We could use a little math to make the turns a little 
-                 // sharper when the X offset is small, or when the powercell
+                 // sharper when the X offset is small, or when the cargo ball
                  // is very close to the robot (Y is large).
 
                                     // The speed should be between 0.1 and 0.3
-            dDesiredSpeed = std::min( (120.0 - powercellOnVideo.Y) / 100.0,
+            dDesiredSpeed = std::min( (120.0 - cargoOnVideo.Y) / 100.0,
                                       0.3 );
                                     // The turn should be between -0.5 and 0.5
-            if        ( 5 <= powercellOnVideo.X ) {
-               // dDesiredTurn = sqrt(powercellOnVideo.X/300.0) );
-               dDesiredTurn = std::min( (powercellOnVideo.X/600.0), 1.0 );
-            } else if ( powercellOnVideo.X < -5 ) {
-               // dDesiredTurn = -sqrt(-powercellOnVideo.X/300.0) );
-               dDesiredTurn = std::max( (powercellOnVideo.X/600.0), -1.0 );
+            if        ( 5 <= cargoOnVideo.X ) {
+               // dDesiredTurn = sqrt(cargoOnVideo.X/300.0) );
+               dDesiredTurn = std::min( (cargoOnVideo.X/600.0), 1.0 );
+            } else if ( cargoOnVideo.X < -5 ) {
+               // dDesiredTurn = -sqrt(-cargoOnVideo.X/300.0) );
+               dDesiredTurn = std::max( (cargoOnVideo.X/600.0), -1.0 );
             } else {
                dDesiredTurn = 0.0;
             }
-         } else {         // else (we'd divert to a powercell if there was one,
-                          // but no powercell is currently in view)
+         } else {       // else (we'd divert to a cargo ball if there was one,
+                        // but no cargo ball is currently in view)
             // then just drive (don't change dDesiredxxx values)
             dDesiredSpeed = dDesiredSpeed/4;
             dDesiredTurn  = dDesiredTurn/4;
          }
 
-            // If we've been told to drive to a powercell, and we now have one
-         if ( bDivertToPowercell && sCurrState.powercellInIntake ) {
+            // If we've been told to drive to a cargo ball, and we now have one
+         if ( bDivertToCargo && sCurrState.cargoInIntake ) {
             dDesiredSpeed = 0.0;                              // stop the robot
             dDesiredTurn  = 0.0;
 //            m_motorLSMaster.SetIntegralAccumulator( 0.0 );
 //            m_motorRSMaster.SetIntegralAccumulator( 0.0 );
-            cout << "D2D() has a powercell!" << endl;
+            cout << "D2D() has a cargo ball!" << endl;
             bReturnValue = true;                    // tell caller we are done
          } else{
             bReturnValue = false;          // tell caller we are still driving
@@ -2142,7 +2121,7 @@ class Robot : public frc::TimedRobot {
          /*------------------------------------------------------------------*/
          /* Shoot()                                                          */
          /* Shoot() waits until the shooter rollers are moving at a desired  */
-         /* speed, then moves the conveyor to shoot powercells.              */
+         /* speed, then moves the conveyor to shoot cargo balls.             */
          /*------------------------------------------------------------------*/
    void Shoot( void ) {
       if ( 0.5 < sCurrState.conY ) {             // if Y-stick pulled backward
@@ -2186,21 +2165,21 @@ class Robot : public frc::TimedRobot {
       /* conveyor system.                                                    */
       /*---------------------------------------------------------------------*/
    void RunConveyor( void ) {
-      //print out if there is a powercell in the intake or not. 
-      if ( sPrevState.powercellInIntake != sCurrState.powercellInIntake ) {
-         if ( sCurrState.powercellInIntake ) {
-            cout << "powercell in the intake." << endl;
+      //print out if there is a cargo ball in the intake or not. 
+      if ( sPrevState.cargoInIntake != sCurrState.cargoInIntake ) {
+         if ( sCurrState.cargoInIntake ) {
+            cout << "cargo ball in the intake." << endl;
          } else {
-            cout << "powercell NOT in the intake." << endl; 
+            cout << "cargo ball NOT in the intake." << endl; 
          } 
       }
       // print out if there is a ball in position 5. 
-      if ( sPrevState.powercellInPosition5 !=
-                                          sCurrState.powercellInPosition5 ) {
-         if ( sCurrState.powercellInPosition5 ) {// if this sensor is blocked
-            cout << "powercell in position 5" << endl;
+      if ( sPrevState.cargoInPosition5 !=
+                                          sCurrState.cargoInPosition5 ) {
+         if ( sCurrState.cargoInPosition5 ) {// if this sensor is blocked
+            cout << "cargo ball in position 5" << endl;
          } else {
-            cout << "powercell NOT in position 5" << endl; 
+            cout << "cargo ball NOT in position 5" << endl; 
          } 
       }
       if ( BUTTON_MANUALCONVEYOR ) {               // Is manual mode selected?
@@ -2229,19 +2208,19 @@ class Robot : public frc::TimedRobot {
          if ( !(sCurrState.conX > 0.5) && !(sCurrState.conY > 0.5) && 
               !(sCurrState.conY < -0.5) ) {
             static int ConveyorCounter = 0;
-            if ( sCurrState.powercellInIntake &&
-              !sCurrState.powercellInPosition5 ) {
+            if ( sCurrState.cargoInIntake &&
+              !sCurrState.cargoInPosition5 ) {
               sCurrState.iConveyPercent = 30;
               m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.3 );
               ConveyorCounter = 6;
             } else if ( ( 0 < ConveyorCounter ) &&
-                        !sCurrState.powercellInPosition5 ) {
+                        !sCurrState.cargoInPosition5 ) {
               sCurrState.iConveyPercent = 30;
               m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.3 );
               ConveyorCounter--;
             } else {
-            //if (  sPrevState.powercellInIntake && 
-            //     !sPrevState.powercellInPosition5 ) {
+            //if (  sPrevState.cargoInIntake && 
+            //     !sPrevState.cargoInPosition5 ) {
                 sCurrState.iConveyPercent = 0;
                 m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.0 );
             // }
@@ -2633,14 +2612,14 @@ class Robot : public frc::TimedRobot {
 
       case M_DRIVE_STRAIGHT:
                    // Drive straight at the specified yaw angle for a specified
-                   // distance, (but if mSeq.bDivertToPcell is TRUE, and
-                   // a powercell is seen by the camera, then drive toward that
-                   // powercell instead).
+                   // distance, (but if mSeq.bDivertToCargo is TRUE, and
+                   // a cargo ball is seen by the camera, then drive toward
+                   // that cargo ball instead).
                    // The DriveToDistance() function returns true
                    // when it has driven far enough.
          bRetVal = DriveToDistance( sCurrState.initialYaw + mSeq.yaw,
                                     mSeq.distance,
-                                    mSeq.bDivertToPcell,
+                                    mSeq.bDivertToCargo,
                                     false );
                                   // If we have driven far enough...
          if ( bRetVal ) {
@@ -2663,7 +2642,7 @@ class Robot : public frc::TimedRobot {
             // Team4918Drive( 0.3, -0.24 );   // turn left while driving forward
             // Team4918Drive( 0.5, -0.40 );   // turn left while driving forward
             // Team4918Drive( 0.55, -0.44 );   // too much
-            if ( mSeq.bDivertToPcell ) {
+            if ( mSeq.bDivertToCargo ) {
                Team4918Drive( 0.5, -0.47 );   // turn left tightly
             } else {
                Team4918Drive( 0.5, -0.44 );   // turn left widely
@@ -2691,7 +2670,7 @@ class Robot : public frc::TimedRobot {
             // Team4918Drive( 0.5,  0.40 );   // turn right while driving forward
             // Team4918Drive( 0.5,  0.44 );   // turn right while driving forward
             // Team4918Drive( 0.55,  0.44 );   // too much
-            if ( mSeq.bDivertToPcell ) {
+            if ( mSeq.bDivertToCargo ) {
                Team4918Drive( 0.5,  0.47 );   // turn right tightly
             } else {
                Team4918Drive( 0.5,  0.44 );   // turn right widely
@@ -2725,13 +2704,11 @@ class Robot : public frc::TimedRobot {
       case M_SHIFT_LOW:
          bRetVal = true;                  // and exit this maneuver immediately
          sCurrState.highGear = false;
-//       m_shiftingSolenoid.Set( false );
          break;
 
       case M_SHIFT_HIGH:
          bRetVal = true;                  // and exit this maneuver immediately
          sCurrState.highGear = true;
-//       m_shiftingSolenoid.Set( true );
          break;
 
       case M_SHOOT:
@@ -2743,8 +2720,8 @@ class Robot : public frc::TimedRobot {
          if ( mSeqPrev.type != mSeq.type ) {          // first call to M_SHOOT?
             iShootCount = 200;  // yes; stay in M_SHOOT for at least 4 seconds
          } else if ( ( iShootCount < 100 ) &&         // else if at least
-              ( sCurrState.powercellInIntake ||       // 1 ball in conveyor
-                sCurrState.powercellInPosition5 ) ) {
+              ( sCurrState.cargoInIntake ||       // 1 ball in conveyor
+                sCurrState.cargoInPosition5 ) ) {
             iShootCount = 100;    // then keep shooting for at least 2 seconds
          } else {
             iShootCount--;
@@ -2805,7 +2782,7 @@ class Robot : public frc::TimedRobot {
                                     // then initialize the starting point
             DriveToDistance( mSeqNext.yaw,
                              mSeqNext.distance,
-                             mSeqNext.bDivertToPcell,
+                             mSeqNext.bDivertToCargo,
                              true );
             // } else if ( M_ROTATE == mSeqNext.type ) {
                       // Else if next maneuver is a rotate, then set the
@@ -2859,7 +2836,7 @@ class Robot : public frc::TimedRobot {
 #endif  // if VISION_PROCESSING
       }
 
-      powercellOnVideo.TestMode = false;
+      cargoOnVideo.TestMode = false;
 
       m_motorLSFollow.Follow( m_motorLSMaster );    // For SparkMax/Neo motors
       m_motorRSFollow.Follow( m_motorRSMaster );
@@ -3003,7 +2980,6 @@ class Robot : public frc::TimedRobot {
 //    m_motorConveyMaster.SetNeutralMode( NeutralMode::Brake );
 
       sCurrState.highGear = false;
-//    m_shiftingSolenoid.Set(false);
       iCallCount++;
       sCurrState.teleop = false;
       // new m_compressor(0);           // initialize compressor
@@ -3058,7 +3034,7 @@ class Robot : public frc::TimedRobot {
       RSMotorState.targetVelocityRPM = 0.0;
       Team4918Drive( 0.0, 0.0 );          // make sure drive motors are stopped
 
-      powercellOnVideo.TestMode = false;
+      cargoOnVideo.TestMode = false;
       // Should power off all motors here.
    }
 
@@ -3076,7 +3052,7 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void TestInit() override {
       limenttable->PutNumber( "ledMode", 1 );                  // turn LEDs off
-      powercellOnVideo.TestMode = true;  // display the center pixel HSV values
+      cargoOnVideo.TestMode = true;      // display the center pixel HSV values
    }
 
    void LEDBlue() {
@@ -3325,7 +3301,7 @@ class Robot : public frc::TimedRobot {
 
       iCallCount++;
 
-      if (  sCurrState.powercellInIntake ) {       // if powercell in intake
+      if (  sCurrState.cargoInIntake ) {       // if a cargo ball in intake
          m_motorIntake.Set( ControlMode::PercentOutput,  0.1 ); // be gentle
       } else {
          m_motorIntake.Set( ControlMode::PercentOutput,  0.4 ); // be strong
@@ -3405,7 +3381,7 @@ class Robot : public frc::TimedRobot {
       //m_motorIntake.Set(ControlMode::PercentOutput,  0.4);
 
       if ( BUTTON_RUNINTAKE )   {                        // Run intake forward.
-         if (  sCurrState.powercellInIntake ) {       // if powercell in intake
+         if (  sCurrState.cargoInIntake ) {       // if a cargo ball in intake
             m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be gentle
          } else {
             m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
@@ -3418,7 +3394,7 @@ class Robot : public frc::TimedRobot {
                                  // or if button 1 was previously pressed
                                  // and button 2 was not previously pressed
                                  // (which would have caused us to call
-                                 // DriveToPowercell, which runs the intake).
+                                 // DriveToCargo, which runs the intake).
       } else if ( BUTTON_TARGET_PREV && !BUTTON_REVERSE_PREV ) {
          m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
                     // Or if we were previously driving the conveyor backwards
@@ -3474,7 +3450,7 @@ class Robot : public frc::TimedRobot {
 };     // class Robot definition (derives from frc::TimedRobot )
 
 
-Robot::sPowercellOnVideo Robot::powercellOnVideo = { true, 0, 0, -1, false, false };
+Robot::sCargoOnVideo Robot::cargoOnVideo = { true, 0, 0, -1, false, false };
 bool Robot::WeAreOnRedAlliance = { true };
 
 #ifndef RUNNING_FRC_TESTS
