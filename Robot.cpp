@@ -4,9 +4,9 @@
  * This code was derived from the MentorBot code.
  */
 
-#define SAFETY_LIMITS 1 /* Implement power/speed limits, for safety. This   */
+// #define SAFETY_LIMITS 1 /* Implement power/speed limits, for safety. This */
                         /* should be removed (not defined) for competition. */
-#define DISP_SMARTDASHBOARD 1  // add smartdashboard tuning displays
+// #define DISP_SMARTDASHBOARD 1  // add smartdashboard tuning displays
 
 #define VISION_PROCESSING 1
 
@@ -436,13 +436,16 @@ class Robot : public frc::TimedRobot {
    // units::time::second_t dTimeOfLastCall = (units::second_t) 0;
 
               // Length is 100 here, though there are 300 LEDs on the 5-meter
-	      // because they go in 3-LED sets in the WS2811 strip we have.
+              // because they go in 3-LED sets in the WS2811 strip we have.
    static constexpr int kLEDStripLength = 100;
+   static constexpr int kNumLEDBufs = 4;
    // PWM port 9
    // This must be a PWM header, not MXP or DIO
    frc::AddressableLED m_led{0};
    std::array<frc::AddressableLED::LEDData, kLEDStripLength>
            m_ledBuffer;  // Reuse the buffer
+   std::array<frc::AddressableLED::LEDData, kLEDStripLength>
+           m_ledBufferArr[kNumLEDBufs];  // Array of LED buffers
    // Store what the last hue of the first pixel is:
    int firstLEDStripPixelHue = 0;
 
@@ -984,8 +987,8 @@ class Robot : public frc::TimedRobot {
                   // The Digital I/O (DIO) connections are made to IR sensors,
                   // which return false if the IR beam is blocked (which means
                   // there is a powercell there) -- so we invert them here. 
-      sCurrState.powercellInIntake    = !conveyorDIO0.Get();
-      sCurrState.powercellInPosition5 = !conveyorDIO1.Get();
+      sCurrState.powercellInPosition5 = !conveyorDIO0.Get();
+      sCurrState.powercellInIntake    = !conveyorDIO1.Get();
 
       limev = limenttable->GetNumber("tv",0.0);  // valid
       limex = limenttable->GetNumber("tx",0.0);  // x position
@@ -2131,7 +2134,7 @@ class Robot : public frc::TimedRobot {
             MotorDisplay( "BS:", m_motorBotShooter, BSMotorState );
          }
       }
-         
+ 
       return true;
    }     // RunShooter()
 
@@ -2150,8 +2153,8 @@ class Robot : public frc::TimedRobot {
               (  950 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
-            sCurrState.iConveyPercent = -80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
+            sCurrState.iConveyPercent = 80;
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.8 );
          }
       } else if (sCurrState.conY < -0.5) {        // if Y-stick pushed forward
          // if ( ( 1900 * 4096 / 600 <
@@ -2161,8 +2164,8 @@ class Robot : public frc::TimedRobot {
               ( 2600 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
-            sCurrState.iConveyPercent = -80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
+            sCurrState.iConveyPercent = 80;
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.8 );
          }
       } else if ( 0.5 < sCurrState.conX ) {  // If X-stick pushed to the right
          if ( ( 750 * 4096 / 600 <
@@ -2170,8 +2173,8 @@ class Robot : public frc::TimedRobot {
               ( 750 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
-            sCurrState.iConveyPercent = -80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
+            sCurrState.iConveyPercent = 80;
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.8 );
          }
       }
    }    // Shoot()
@@ -2205,15 +2208,15 @@ class Robot : public frc::TimedRobot {
          if ( BUTTON_CONVEYORFORWARD && BUTTON_CONVEYORBACKWARD ) {
                    // Then run the conveyor according to the Joystick throttle
             m_motorConveyMaster.Set( ControlMode::PercentOutput,
-                                     0.5*sCurrState.joyZ );
+                                     -0.5*sCurrState.joyZ );
             m_motorIntake.Set( ControlMode::PercentOutput,
-			       -1.0 * sCurrState.joyZ );
-	 } else if ( BUTTON_CONVEYORFORWARD )   {     // Run conveyor forward.
-            sCurrState.iConveyPercent = -80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput, -1.0 );
+                               -1.0 * sCurrState.joyZ );
+         } else if ( BUTTON_CONVEYORFORWARD )   {     // Run conveyor forward.
+            sCurrState.iConveyPercent = 80;
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.8 );
          } else if ( BUTTON_CONVEYORBACKWARD ) {     // Run conveyor backward.
-            sCurrState.iConveyPercent =  80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput,  0.8 );
+            sCurrState.iConveyPercent =  -80;
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
             //sCurrState.iIntakePercent = -40;   // Run intake backwards, too.
             //m_motorIntake.Set( ControlMode::PercentOutput, -0.4 );
          } else {                                         // Stop the conveyor.
@@ -2228,13 +2231,13 @@ class Robot : public frc::TimedRobot {
             static int ConveyorCounter = 0;
             if ( sCurrState.powercellInIntake &&
               !sCurrState.powercellInPosition5 ) {
-              sCurrState.iConveyPercent = -30;
-              m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.3 );
+              sCurrState.iConveyPercent = 30;
+              m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.3 );
               ConveyorCounter = 6;
             } else if ( ( 0 < ConveyorCounter ) &&
                         !sCurrState.powercellInPosition5 ) {
-              sCurrState.iConveyPercent = -30;
-              m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.3 );
+              sCurrState.iConveyPercent = 30;
+              m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.3 );
               ConveyorCounter--;
             } else {
             //if (  sPrevState.powercellInIntake && 
@@ -2310,12 +2313,12 @@ class Robot : public frc::TimedRobot {
          } else {
                                                    // apply full climbing power
             m_motorClimberPole.Set( 0.95 );
-	    if ( m_ClimberForwardLimitSwitch.Get() ) {
+            if ( m_ClimberForwardLimitSwitch.Get() ) {
                limitSwitchHasBeenHit = true;
             }
          }
       } else if (BUTTON_CLIMBERDOWN ) {
-         m_motorClimberPole.Set( -0.05 );
+         m_motorClimberPole.Set( -0.95 );
            
       } else { 
          // Else neither button is currently being pressed.  If either was
@@ -2335,7 +2338,7 @@ class Robot : public frc::TimedRobot {
             }
             cout << setw(5) <<
                m_motorClimberPole.GetOutputCurrent() << "A" << endl;
-	    if ( m_ClimberForwardLimitSwitch.Get() ) {
+            if ( m_ClimberForwardLimitSwitch.Get() ) {
                cout << "Climber pole at top." << endl;
             } else if ( m_ClimberReverseLimitSwitch.Get() ) {
                cout << "Climber pole at bottom." << endl;
@@ -2394,8 +2397,8 @@ class Robot : public frc::TimedRobot {
 #ifdef SAFETY_LIMITS
                  // 10 Amps below 5000 RPM, above 5000 RPM it ramps from
                  // 10 Amps down to  5 Amps at 5700 RPM
-		 // At this low current limit, the robot will be unable to
-		 // rotate-in-place on carpet.
+                 // At this low current limit, the robot will be unable to
+                 // rotate-in-place on carpet.
       m_motor.SetSmartCurrentLimit( 10,  5, 5000 );
 #else
                  // 30 Amps below 5000 RPM, above 5000 RPM it ramps from
@@ -2412,7 +2415,7 @@ class Robot : public frc::TimedRobot {
 
       m_motor.SetIdleMode( rev::CANSparkMax::IdleMode::kCoast );
 
-   }      // MotorInitSpark()
+   }      // MotorInitSparkBrushed()
 
 
       /*---------------------------------------------------------------------*/
@@ -2457,8 +2460,8 @@ class Robot : public frc::TimedRobot {
 #ifdef SAFETY_LIMITS
                  // 10 Amps below 5000 RPM, above 5000 RPM it ramps from
                  // 10 Amps down to  5 Amps at 5700 RPM
-		 // At this low current limit, the robot will be unable to
-		 // rotate-in-place on carpet.
+                 // At this low current limit, the robot will be unable to
+                 // rotate-in-place on carpet.
       m_motor.SetSmartCurrentLimit( 10,  5, 5000 );
 #else
                  // 30 Amps below 5000 RPM, above 5000 RPM it ramps from
@@ -2860,6 +2863,21 @@ class Robot : public frc::TimedRobot {
 
       m_motorLSFollow.Follow( m_motorLSMaster );    // For SparkMax/Neo motors
       m_motorRSFollow.Follow( m_motorRSMaster );
+                  // Reduce CANbus bandwidth utilization for follower motors
+                  // since the info the status frames provide isn't necessary
+                  // (it is mostly just duplicates of the Master motor's info).
+      m_motorLSFollow.SetPeriodicFramePeriod(
+                      rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus0, 100 );
+      m_motorRSFollow.SetPeriodicFramePeriod(
+                      rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus0, 100 );
+      m_motorLSFollow.SetPeriodicFramePeriod(
+                      rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus1, 500 );
+      m_motorRSFollow.SetPeriodicFramePeriod(
+                      rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus1, 500 );
+      m_motorLSFollow.SetPeriodicFramePeriod(
+                      rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus2, 500 );
+      m_motorRSFollow.SetPeriodicFramePeriod(
+                      rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus2, 500 );
 
 //    m_motorConveySlave.Follow(m_motorConveyMaster);
 
@@ -2875,12 +2893,50 @@ class Robot : public frc::TimedRobot {
       MotorInit( m_motorBotShooter );
       m_motorTopShooter.ConfigPeakOutputReverse(  0.0, 10 );
       m_motorBotShooter.ConfigPeakOutputReverse(  0.0, 10 );
+              // reduce CANbus bandwidth utilization for shooter motors,
+              // since we don't need error info more than every 20 milliseconds
+      // m_motorTopShooter.SetStatusFramePeriod(
+      //    ctre::phoenix::motorcontrol::StatusFrameEnhanced::Status_1_General,
+      //      20, 0 );
+      // m_motorBotShooter.SetStatusFramePeriod(
+      //    ctre::phoenix::motorcontrol::StatusFrameEnhanced::Status_1_General,
+      //      20, 0 );
+
       MotorInitSparkBrushed( m_motorLSClimber );
       MotorInitSparkBrushed( m_motorRSClimber );
+                    // Reduce CANbus bandwidth utilization for climber motors,
+                    // since we don't care about their position, and they
+                    // don't have encoders to report velocity anyway.
+      m_motorLSClimber.SetPeriodicFramePeriod(
+                      rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus1, 500 );
+      m_motorRSClimber.SetPeriodicFramePeriod(
+                      rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus1, 500 );
+      m_motorLSClimber.SetPeriodicFramePeriod(
+                      rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus2, 500 );
+      m_motorRSClimber.SetPeriodicFramePeriod(
+                      rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus2, 500 );
       m_LSClimberForwardLimitSwitch.EnableLimitSwitch( true );
       m_LSClimberReverseLimitSwitch.EnableLimitSwitch( true );
       m_RSClimberForwardLimitSwitch.EnableLimitSwitch( true );
       m_RSClimberReverseLimitSwitch.EnableLimitSwitch( true );
+
+         // Reduce CANbus bandwidth utilization for intake and conveyor motors,
+         // since we don't need error info more than every 20 milliseconds,
+         // and don't need position or velocity at all (these two motors are
+         // driven by victors without encoders, and can't provide values for
+         // position or velocity).
+      m_motorIntake.SetStatusFramePeriod(
+            ctre::phoenix::motorcontrol::StatusFrameEnhanced::Status_1_General,
+                                          20, 0 );
+      m_motorConveyMaster.SetStatusFramePeriod(
+            ctre::phoenix::motorcontrol::StatusFrameEnhanced::Status_1_General,
+                                                20, 0 );
+      m_motorIntake.SetStatusFramePeriod(
+          ctre::phoenix::motorcontrol::StatusFrameEnhanced::Status_2_Feedback0,
+                                          255, 0 );
+      m_motorConveyMaster.SetStatusFramePeriod(
+          ctre::phoenix::motorcontrol::StatusFrameEnhanced::Status_2_Feedback0,
+                                                255, 0 );
 
                                     // invert encoder value positive/negative
                                     // and motor direction, for some motors.
@@ -2959,6 +3015,8 @@ class Robot : public frc::TimedRobot {
       m_led.SetLength( kLEDStripLength );
       m_led.SetData( m_ledBuffer );
       m_led.Start();
+
+      LEDInit();   // initialize all LED sequences
 
    }      // RobotInit()
 
@@ -3063,6 +3121,27 @@ class Robot : public frc::TimedRobot {
 
    void LEDTest() {
       static int color=0;
+               // Change the code below to reduce CPU congestion:
+               // Use code based on the global iCallCount to perform various
+               // parts of the LED buffer setting and enabling, culminating
+               // in refreshing the LED strip values.  For example:
+               // if ( 0 == iCallCount%5 )         {   // every 0.1 seconds
+               //    Set up LEDs for tentacle 1
+               // } else if ( 1 == iCallCount%5 )  {
+               //    Set up LEDs for tentacle 2
+               //      (... etc. ...)
+               // } else if ( 2 == iCallCount%5 )  {
+               //    m_led.SetData( m_ledBuffer );
+               // }
+               // Another change: For simple sequences (for example, lights
+               // cascading up or down the tentacles), create a new function
+               // LEDInit() to set up all of the m_ledBufferArr[x] buffers,
+               // then change the below code to simply call functions like
+               // these every 0.1 second or so:
+               //     m_led.SetData( m_ledBufferArr[iCallCount%kNumLEDBufs] );
+               // or, to go through the buffers in opposite order (3,2,1,0):
+               //     m_led.SetData( m_ledBufferArr[
+               //        (-iCallCount%kNumLEDBufs+kNumLEDBufs)%kNumLEDBufs] );
       // for every pixel...
       for ( int i = 0; i < kLEDStripLength; i++ ) {
          // int iabs = ( 179 * abs(50 - i) ) / 50;
@@ -3072,22 +3151,77 @@ class Robot : public frc::TimedRobot {
             } else {
                m_ledBuffer[i].SetRGB( 0, 0, 255); // fully-saturated pure blue
             }
-	 } else if ( ( 33 < i ) && ( i < 66 ) ) {  // LEDs curving up to top
-            // m_ledBuffer[iabs].SetHSV( i*3, 255, 16 );
-            m_ledBuffer[i].SetHSV( i*3, 255, 16 );
-	 } else if ( ( 30 < i ) && ( i < 69 ) ) { // LEDs curving down from top
-            m_ledBuffer[i].SetHSV( i*3, 255, 16 );
-	 } else if ( ( 17 < i ) && ( i < 82 ) ) { // out to tip of aft tentacle
-            m_ledBuffer[i].SetHSV( i*3, 255, 16 );
-	 } else if ( i == color/3 ) {
+         } else if ( i == (color*kLEDStripLength)/180 ) {
               // set the value
             m_ledBuffer[i].SetHSV( color, 255, 128 );
+         } else if ( ( 33 < i ) && ( i < 66 ) ) {  // LEDs curving up to top
+            // m_ledBuffer[iabs].SetHSV( i*3, 255, 16 );
+            m_ledBuffer[i].SetHSV( i*3, 255, 16 );
+         } else if ( ( 30 < i ) && ( i < 69 ) ) { // LEDs curving down from top
+            m_ledBuffer[i].SetHSV( i*3, 255, 16 );
+         } else if ( ( 17 < i ) && ( i < 82 ) ) { // out to tip of aft tentacle
+            m_ledBuffer[i].SetHSV( i*3, 255, 16 );
          } else {
             m_ledBuffer[i].SetHSV( i*3, 255, 16 );
          }
       }
       m_led.SetData( m_ledBuffer );
       color = (color+1)%180;
+   }
+
+                       // Blank all the LEDs in the strip.  This function is
+                       // for convenience in testing only, so we don't have to
+                       // look at the bright LEDs all the time while testing.
+   void LEDBlank() {
+      for ( int iBufNum = 0; iBufNum < kNumLEDBufs; iBufNum++ ) {
+         for ( int iLEDNum = 0; iLEDNum < kLEDStripLength; iLEDNum++ ) {
+            m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 0, 0 );
+         }
+      }
+   }
+
+                       // Set up all the LEDs buffers for the LED strip.
+                       // This function fills all the m_ledBufferArr[x]
+                       // buffers so that when written to the LED strip
+                       // in sequence, orange LEDs cascade up or down,
+                       // separated by unlit LEDs.
+   void LEDInit() {
+      for ( int iBufNum = 0; iBufNum < kNumLEDBufs; iBufNum++ ) {
+         for ( int iLEDNum = 0; iLEDNum < kLEDStripLength; iLEDNum++ ) {
+                                                       // if LEDs facing intake
+            if ( ( 40 < iLEDNum ) && ( iLEDNum < 59 ) ) {
+               if ( WeAreOnRedAlliance ) {
+                                                  // fully-saturated pure red
+                  m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 255, 0, 0 );
+               } else {
+                                                  // fully-saturated pure blue
+                  m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 0, 255);
+               }
+            } else {
+                             // advancing orange LEDS, separated by unlit LEDs
+               if ( iBufNum == iLEDNum % kNumLEDBufs ) {
+                  m_ledBufferArr[iBufNum][iLEDNum].SetHSV( 30, 255, 32 );
+               } else {
+                  m_ledBufferArr[iBufNum][iLEDNum].SetHSV(
+                                     (iLEDNum*180)/kLEDStripLength, 255, 16 );
+               }
+            }
+         }
+      }
+   }
+
+   void LEDCompetition() {
+      if ( 0 == iCallCount%5 ) {                           // every 0.1 second
+         int iFrame = iCallCount/5;
+         if ( BUTTON_REVERSE ) {    // if "reverse direction" button is pressed
+                                 // move the lit LEDs in the opposite direction
+            m_led.SetData( m_ledBufferArr[
+                    (-iFrame%kNumLEDBufs+kNumLEDBufs)%kNumLEDBufs] );
+         } else {
+                                 // move the lit LEDs in the forward direction
+            m_led.SetData( m_ledBufferArr[iFrame%kNumLEDBufs] );
+         }
+      }
    }
 
       /*---------------------------------------------------------------------*/
@@ -3315,9 +3449,9 @@ class Robot : public frc::TimedRobot {
 //    RunColorWheel();
 
       RunClimberPole( m_motorLSClimber, m_LSClimberForwardLimitSwitch,
-		                        m_LSClimberReverseLimitSwitch );
+                                        m_LSClimberReverseLimitSwitch );
       RunClimberPole( m_motorRSClimber, m_RSClimberForwardLimitSwitch,
-		                        m_RSClimberReverseLimitSwitch );
+                                        m_RSClimberReverseLimitSwitch );
 //    RunClimberWinch();
       SwitchCameraIfNecessary();
 
@@ -3325,9 +3459,14 @@ class Robot : public frc::TimedRobot {
          // cout << "TelPeriodic loop duration: ";
          // cout << frc::GetTime() - dTimeOfLastCall << endl;
                // use frc:Timer::GetFPGATimestamp() instead?
+         // LEDInit();   // initialize LED sequences
+      }
+      if ( BUTTON_MANUALCONVEYOR ) {
+         LEDBlank();   // Blank all LED sequences (for testing only!)
       }
       // LEDAllianceColor();         // light the entire LED strip blue or red
-      LEDTest();       // Alliance color at intake, rainbow everywhere else
+      // LEDTest();       // Alliance color at intake, rainbow everywhere else
+      LEDCompetition();   // Advancing orange LEDS, separated by unlit LEDs
 
       iCallCount++;
    }      // TeleopPeriodic()
