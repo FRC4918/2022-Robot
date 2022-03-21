@@ -963,7 +963,7 @@ class Robot : public frc::TimedRobot {
       }  // else the gyro didn't update the yaw rate
 
           // Has the gyro position updated? Like the yaw rate (handled above),
-	  // the gyro also only updates yaw position every 0.1 second.
+          // the gyro also only updates yaw position every 0.1 second.
       if ( sPrevState.yawPitchRoll[0] != sCurrState.yawPitchRoll[0] ) {
                             // yes; record actual value (correct our estimate)
          sCurrState.yawPosnEstimate = sCurrState.yawPitchRoll[0];
@@ -1003,6 +1003,9 @@ class Robot : public frc::TimedRobot {
    void AdjustJoystickValues( void ) {
       double adjustedJoyY;
       double adjustedJoyX;
+#ifndef SAFETY_LIMITS
+      double dThrottle;
+#endif
 
               // our joystick increases Y when pulled BACKWARDS, and increases
               // X when pushed to the right.
@@ -1050,8 +1053,22 @@ class Robot : public frc::TimedRobot {
                                        adjustedJoyX );
       }
 
+#ifdef SAFETY_LIMITS
       sCurrState.joyY = adjustedJoyY;
       sCurrState.joyX = adjustedJoyX;
+#else
+                          // Use throttle (Z-axis at base of joystick)
+                          // to give the driver very precise control of speed.
+                          // The joyZ value runs from -1.0 to +1.0, and is
+                          // negative when pushed forward, and positive when
+                          // pushed backward -- so change range to 0.0-1.0,
+                          // with 0.0 when pulled all the way backward and
+                          // 1.0 when pushed all the way forward -- then
+                          // multiply that number by both axes to scale them.
+      dThrottle = ( 1.0-sCurrState.joyZ ) / 2.0;
+      sCurrState.joyY = adjustedJoyY * dThrottle;
+      sCurrState.joyX = adjustedJoyX * dThrottle;
+#endif
    }      // AdjustJoystickValues()
 
 
@@ -1532,9 +1549,9 @@ class Robot : public frc::TimedRobot {
 
       iCallCount++;
       if (  sCurrState.cargoInIntake ) {          // if cargo ball in intake
-         m_motorIntake.Set( ControlMode::PercentOutput,  1.0 ); // be gentle
+         m_motorIntake.Set( ControlMode::PercentOutput,  0.6 ); // be gentle
       } else {
-         m_motorIntake.Set( ControlMode::PercentOutput,  1.0 ); // be strong
+         m_motorIntake.Set( ControlMode::PercentOutput,  0.6 ); // be strong
       }
       RunConveyor();
 
@@ -2038,8 +2055,8 @@ class Robot : public frc::TimedRobot {
            //02/04/2022 max speed 3600
       if (   ( 0.5 < sCurrState.conY ) &&           // if console "joystick" is
             !( 0.5 < sPrevState.conY ) ) {          // newly-pressed downward
-         TSMotorState.targetVelocity_UnitsPer100ms =  1000 * 4096 / 600;
-         BSMotorState.targetVelocity_UnitsPer100ms =  1000 * 4096 / 600;
+         TSMotorState.targetVelocity_UnitsPer100ms =   900 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =  1050 * 4096 / 600;
          m_motorTopShooter.Set( ControlMode::Velocity, 
                                 TSMotorState.targetVelocity_UnitsPer100ms );
          m_motorBotShooter.Set( ControlMode::Velocity, 
@@ -2057,8 +2074,8 @@ class Robot : public frc::TimedRobot {
                   !( sPrevState.conY < -0.5 ) ) { // is newly-pressed upward
          //TSMotorState.targetVelocity_UnitsPer100ms =  2200 * 4096 / 600;
          //BSMotorState.targetVelocity_UnitsPer100ms = -3000 * 4096 / 600;
-         TSMotorState.targetVelocity_UnitsPer100ms =  3000 * 4096 / 600;
-         BSMotorState.targetVelocity_UnitsPer100ms =  3000 * 4096 / 600;
+         TSMotorState.targetVelocity_UnitsPer100ms =  2500 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =  2700 * 4096 / 600;
          m_motorTopShooter.Set( ControlMode::Velocity, 
                                 TSMotorState.targetVelocity_UnitsPer100ms );
          m_motorBotShooter.Set( ControlMode::Velocity, 
@@ -2132,8 +2149,9 @@ class Robot : public frc::TimedRobot {
               (  950 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
-            sCurrState.iConveyPercent = 80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.8 );
+            sCurrState.iConveyPercent = 100;
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, 1.0 );
+            m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
          }
       } else if (sCurrState.conY < -0.5) {        // if Y-stick pushed forward
          // if ( ( 1900 * 4096 / 600 <
@@ -2143,8 +2161,9 @@ class Robot : public frc::TimedRobot {
               ( 2600 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
-            sCurrState.iConveyPercent = 80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.8 );
+            sCurrState.iConveyPercent = 100;
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, 1.0 );
+            m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
          }
       } else if ( 0.5 < sCurrState.conX ) {  // If X-stick pushed to the right
          if ( ( 750 * 4096 / 600 <
@@ -2152,9 +2171,18 @@ class Robot : public frc::TimedRobot {
               ( 750 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
-            sCurrState.iConveyPercent = 80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.8 );
+            sCurrState.iConveyPercent = 100;
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, 1.0 );
+            m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
          }
+      } else if ( ( 0.5 < sPrevState.conY  ) ||    // else if X- or Y-stick WAS
+                  ( sPrevState.conY < -0.5 ) ||    // pushed in any "shoot"
+                  ( 0.5 < sPrevState.conX  )   ) { // direction, and now is not
+                                           // Then turn off conveyor and intake
+         sPrevState.iConveyPercent = 0;
+         sCurrState.iConveyPercent = 0;
+         m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.0 );
+         m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
       }
    }    // Shoot()
 
@@ -2196,12 +2224,14 @@ class Robot : public frc::TimedRobot {
          } else if ( BUTTON_CONVEYORBACKWARD ) {     // Run conveyor backward.
             sCurrState.iConveyPercent =  -80;
             m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
-            //sCurrState.iIntakePercent = -40;   // Run intake backwards, too.
-            //m_motorIntake.Set( ControlMode::PercentOutput, -0.4 );
+            sCurrState.iIntakePercent = -60;     // Run intake backwards, too.
+            m_motorIntake.Set( ControlMode::PercentOutput, -0.6 );
          } else {                                         // Stop the conveyor.
            sCurrState.iConveyPercent = 0;
            if (BUTTON_CONVEYORFORWARD_PREV||BUTTON_CONVEYORBACKWARD_PREV) {
               m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.0);
+              sCurrState.iIntakePercent = 0;         // Stop the conveyor, too.
+              m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
            }
          }
       } else {
@@ -2210,12 +2240,12 @@ class Robot : public frc::TimedRobot {
             static int ConveyorCounter = 0;
             if ( sCurrState.cargoInIntake &&
               !sCurrState.cargoInPosition5 ) {
-              sCurrState.iConveyPercent = 30;
+              sCurrState.iConveyPercent = 60;
               m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.3 );
               ConveyorCounter = 6;
             } else if ( ( 0 < ConveyorCounter ) &&
                         !sCurrState.cargoInPosition5 ) {
-              sCurrState.iConveyPercent = 30;
+              sCurrState.iConveyPercent = 60;
               m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.3 );
               ConveyorCounter--;
             } else {
@@ -2856,8 +2886,6 @@ class Robot : public frc::TimedRobot {
       m_motorRSFollow.SetPeriodicFramePeriod(
                       rev::CANSparkMaxLowLevel::PeriodicFrame::kStatus2, 500 );
 
-//    m_motorConveySlave.Follow(m_motorConveyMaster);
-
                                           // SparkMax/Neo motors (drive motors)
       MotorInitSpark( m_motorLSMaster, m_LSMasterPID, m_LSMasterEncoder );
       MotorInitSpark( m_motorRSMaster, m_RSMasterPID, m_RSMasterEncoder );
@@ -2881,6 +2909,11 @@ class Robot : public frc::TimedRobot {
 
       MotorInitSparkBrushed( m_motorLSClimber );
       MotorInitSparkBrushed( m_motorRSClimber );
+      m_motorLSClimber.SetIdleMode( rev::CANSparkMax::IdleMode::kBrake );
+      m_motorRSClimber.SetIdleMode( rev::CANSparkMax::IdleMode::kBrake );
+      m_motorLSClimber.SetSmartCurrentLimit( 60, 10, 5000 );
+      m_motorRSClimber.SetSmartCurrentLimit( 60, 10, 5000 );
+
                     // Reduce CANbus bandwidth utilization for climber motors,
                     // since we don't care about their position, and they
                     // don't have encoders to report velocity anyway.
@@ -2977,7 +3010,7 @@ class Robot : public frc::TimedRobot {
          m_motorBotShooter.Config_kD( 0, 0.0,  10 );
       }
 
-//    m_motorConveyMaster.SetNeutralMode( NeutralMode::Brake );
+      m_motorConveyMaster.SetNeutralMode( NeutralMode::Brake );
 
       sCurrState.highGear = false;
       iCallCount++;
@@ -3382,9 +3415,9 @@ class Robot : public frc::TimedRobot {
 
       if ( BUTTON_RUNINTAKE )   {                        // Run intake forward.
          if (  sCurrState.cargoInIntake ) {       // if a cargo ball in intake
-            m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be gentle
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.6 ); // be gentle
          } else {
-            m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.6 ); // be strong
          }
                             // If necessary (for any reason), stop the intake.
                                  // if the "RUN INTAKE" button was previously
