@@ -1003,9 +1003,6 @@ class Robot : public frc::TimedRobot {
    void AdjustJoystickValues( void ) {
       double adjustedJoyY;
       double adjustedJoyX;
-#ifndef SAFETY_LIMITS
-      double dThrottle;
-#endif
 
               // our joystick increases Y when pulled BACKWARDS, and increases
               // X when pushed to the right.
@@ -1053,22 +1050,9 @@ class Robot : public frc::TimedRobot {
                                        adjustedJoyX );
       }
 
-#ifdef SAFETY_LIMITS
       sCurrState.joyY = adjustedJoyY;
       sCurrState.joyX = adjustedJoyX;
-#else
-                          // Use throttle (Z-axis at base of joystick)
-                          // to give the driver very precise control of speed.
-                          // The joyZ value runs from -1.0 to +1.0, and is
-                          // negative when pushed forward, and positive when
-                          // pushed backward -- so change range to 0.0-1.0,
-                          // with 0.0 when pulled all the way backward and
-                          // 1.0 when pushed all the way forward -- then
-                          // multiply that number by both axes to scale them.
-      dThrottle = ( 1.0-sCurrState.joyZ ) / 2.0;
-      sCurrState.joyY = adjustedJoyY * dThrottle;
-      sCurrState.joyX = adjustedJoyX * dThrottle;
-#endif
+
    }      // AdjustJoystickValues()
 
 
@@ -1234,6 +1218,9 @@ class Robot : public frc::TimedRobot {
       /* It uses desiredForward (-1.0 to +1.0) as the desired forward speed, */
       /* and desiredTurn (-1.0 to +1.0, positive to the right) for the       */
       /* desired turn rate.                                                  */
+      /* Added use of joyZ axis (the throttle paddle on the joystick) to     */
+      /* scale the forward and turn speed; pushing that throttle forward     */
+      /* increases the sensitivity of the main joystick.                     */
       /*---------------------------------------------------------------------*/
    void Team4918Drive( double desiredForward, double desiredTurn ) {
                   /* To drive the robot using the drive motor encoders,     */
@@ -1246,7 +1233,20 @@ class Robot : public frc::TimedRobot {
                   /* direction could look like this:                        */
       double LSMasterOutput = 0.0;
       double RSMasterOutput = 0.0;
+      double dThrottle;
       // m_drive.StopMotor();
+                          // Use throttle (Z-axis at base of joystick)
+                          // to give the driver very precise control of speed.
+                          // The joyZ value runs from -1.0 to +1.0, and is
+                          // negative when pushed forward, and positive when
+                          // pushed backward -- so change range to 0.1-1.0,
+                          // with 0.1 when pulled all the way backward and
+                          // 1.0 when pushed all the way forward -- then
+                          // multiply that number by both axes to scale them.
+      dThrottle = ( 1.0-sCurrState.joyZ ) / 2.0;
+      std::min( 0.1, dThrottle );
+      desiredForward = desiredForward * dThrottle;
+      desiredTurn    = desiredTurn    * dThrottle;
 #ifdef SAFETY_LIMITS
                            // for safety: allow limited range only -0.5 to 0.5
       desiredForward = std::min(  0.5, desiredForward );
@@ -1356,7 +1356,16 @@ class Robot : public frc::TimedRobot {
          // currentHeading =  std::fmod( sCurrState.yawPosnEstimate, 360.0 );
             // Don't bother correcting the range to 0-360; the arithmetic
             // below works even if currentHeading ranges from -36000 to +36000
-         currentHeading =  sCurrState.yawPosnEstimate;
+         if ( BUTTON_REVERSE ) {           // If we're driving in reverse mode
+                        // then adjust so "currentHeading" is in the direction
+                        // of the limelight, rather than the intake,
+            currentHeading =  sCurrState.yawPosnEstimate + 180.0;
+                        // and speed is negative, so robot drives backward.
+            desiredSpeed = desiredSpeed * -1.0;
+         } else {
+                        // else currentheading is towards the intake
+            currentHeading =  sCurrState.yawPosnEstimate;
+         }
 
          headingDifference =
                 std::fmod( desiredHeading - currentHeading + 36000.0, 360.0 );
@@ -1750,15 +1759,17 @@ class Robot : public frc::TimedRobot {
       }
                  // Calculate the Yaw Position we'd arrive at (when we came to
                  // a stop) if we simply decelerated our turn rate at
-                 // 1000.0 degrees/sec/sec, starting right now.
+                 // 700.0 degrees/sec/sec, starting right now.
                  // This is conservative; I have measured EZ-PZ angular
                  // acceleration rate at about 2500 deg/sec/sec.
                  // (max yaw rate is about 500 deg/sec).
       dEventualYawPosition = currentYaw + 0.5 * sCurrState.yawRateEstimate *
-                                      abs(sCurrState.yawRateEstimate) / 1000.0;
+                                      abs(sCurrState.yawRateEstimate) / 700.0;
              // Since we now account for yaw rate in deciding when to end the
              // turn, we can be more aggressive in starting the turn:
       dDesiredTurn = ( dEventualYawPosition - desiredYaw ) * 1.0/25.0;
+      dDesiredTurn = std::max( -1.0, dDesiredTurn );
+      dDesiredTurn = std::min(  1.0, dDesiredTurn );
 
 #ifdef JAG_NOTDEFINED
                        // If we're turning at less than 50 degrees per second,
@@ -1895,16 +1906,18 @@ class Robot : public frc::TimedRobot {
          }
                  // Calculate the Yaw Position we'd arrive at (when we came to
                  // a stop) if we simply decelerated our turn rate at
-                 // 1000.0 degrees/sec/sec, starting right now.
+                 // 700.0 degrees/sec/sec, starting right now.
                  // This is conservative; I have measured EZ-PZ angular
                  // acceleration rate at about 2500 deg/sec/sec.
                  // (max yaw rate is about 500 deg/sec).
          dEventualYawPosition = sCurrState.yawPosnEstimate +
                                       0.5 * sCurrState.yawRateEstimate *
-                                      abs(sCurrState.yawRateEstimate) / 1000.0;
+                                      abs(sCurrState.yawRateEstimate) / 700.0;
              // Since we now account for yaw rate in deciding when to end the
              // turn, we can be more aggressive in starting the turn:
          dDesiredTurn = ( dEventualYawPosition - desiredYaw ) * 1.0/50.0;
+         dDesiredTurn = std::max( -1.0, dDesiredTurn );
+         dDesiredTurn = std::min(  1.0, dDesiredTurn );
          
          if ( !bDivertToCargo ) {     // if we are ignoring cargo balls (we've
                                       // been told NOT to divert to cargo)
@@ -1988,63 +2001,6 @@ class Robot : public frc::TimedRobot {
 
       return bReturnValue;
    }  // DriveToDistance()
-
-
-      //create FollowWall function
-      /*---------------------------------------------------------------------*/
-      /* FollowWall()                                                        */
-      /* This function drives the robot along a wall.                        */
-      /*   distLeft is a distance in inches to the left-side wall.           */
-      /*   distRight is a distance in inches to the right-side wall; it is   */
-      /*             only used if distLeft is zero (or less than 6 inches).  */
-      /*   straight is a heading angle to drive when the wall is exactly     */
-      /*            the specified distance away.                             */
-      /*   turnTo is a heading angle to drive when the wall is too far away. */
-      /*   turnAway is a heading angle to drive when the wall is too close.  */
-      /* All heading angles are relative to the direction the robot was      */
-      /* facing when first powered up.                                       */
-      /* Generally: straight should be set to the heading along the wall,    */
-      /*            and turnTo and turnAway should be set to 30-40 degrees   */
-      /*            towards or away from the wall.                           */
-      /*---------------------------------------------------------------------*/
-
-   void FollowWall( double distLeft, double distRight,
-                    double straight, double turnTo, double turnAway ) {
-      double      wallDistance;
-      double      currentYaw = sCurrState.yawPitchRoll[0];
-      // double      prevYaw    = sPrevState.yawPitchRoll[0];
-      
-      if ( 6.0 < distLeft ){ //left side wall
-         wallDistance = distSensor0.GetVoltage() * 100 / 2.54;
-         if (wallDistance < distLeft - 1.0){ //too close to wall
-            DriveToDistance (turnAway, 1.0, false, true);//turn away
-            if ( 0 == iCallCount%1 ){
-               printf( "right %f\n", currentYaw);
-            }
-         }else if (distLeft + 1.0 < wallDistance){ //too far from wall
-            DriveToDistance (turnTo, 1.0, false, true);//turn to wall
-            if ( 0 == iCallCount%25 ){
-               printf("left %f\n", currentYaw);
-            }
-         }else  {//right distance from wall
-                                                     // maintain speed/heading
-            DriveToDistance (straight, 1.0, false, true);
-            if ( 0 == iCallCount%25 ){
-               printf("straight %f\n", currentYaw);
-            }
-          }
-      }else{ //Right side wall
-         wallDistance = distSensor1.GetVoltage() * 100 / 2.54;
-         if (wallDistance < distRight + 1.0){ //too close to wall
-            DriveToDistance (turnAway, 1.0, false, true);//turn away
-         }else if (distRight - 1.0 < wallDistance){ //too far from wall
-            DriveToDistance (turnTo, 1.0, false, true);//turn to wall
-         }else { //right distance from wall
-            DriveToDistance (straight, 1.0, false, true);
-            //maintain speed/heading
-          }  
-       }  
-   }  // FollowWall()
 
 
          /*------------------------------------------------------------------*/
@@ -2263,37 +2219,6 @@ class Robot : public frc::TimedRobot {
       }
    }   // RunConveyor()
 
-#ifdef JAG_NOTDEFINED
-      /*---------------------------------------------------------------------*/
-      /* RunColorWheel()                                                     */
-      /* Extend or retract the color wheel flipper.                          */
-      /*---------------------------------------------------------------------*/
-   void RunColorWheel( void ) {
-      static int iCallCount = 0;
-      static bool bFlipperState = false;
-      iCallCount++;
-
-                              // If the "EXTEND Color Wheel" button is pressed
-                              // (Console button 6; the lowest-left button)
-      if ( !BUTTON_EXTENDCOLORWHEEL_PREV && BUTTON_EXTENDCOLORWHEEL ) {
-         if ( bFlipperState ){
-            m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kForward);
-            cout << "FIRST HALF";
-         } else {
-            m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kReverse);
-            cout << "SECOND";
-         }
-         bFlipperState = !bFlipperState; 
-      }
-                              // If the "RUN Color Wheel" button is pressed
-                              // (Console button 7; the center-bottom button)
-      if ( BUTTON_RUNCOLORWHEEL ) {
-         m_motorFlippyFlippy.Set(ControlMode::PercentOutput, 0.2);
-      } else {
-         m_motorFlippyFlippy.Set(ControlMode::PercentOutput, 0.0);
-      }
-   }
-#endif
 
       /*---------------------------------------------------------------------*/
       /* RunClimberPole()                                                    */
@@ -2322,9 +2247,9 @@ class Robot : public frc::TimedRobot {
          } else {
                                                    // apply full climbing power
             m_motorClimberPole.Set( 0.95 );
-            if ( m_ClimberForwardLimitSwitch.Get() ) {
+            // if ( m_ClimberForwardLimitSwitch.Get() ) {
                limitSwitchHasBeenHit = true;
-            }
+            // }
          }
       } else if (BUTTON_CLIMBERDOWN ) {
          m_motorClimberPole.Set( -0.95 );
@@ -2355,28 +2280,6 @@ class Robot : public frc::TimedRobot {
          }
       }
    }      // RunClimberPole() 
-
-
-#ifdef JAG_NOTDEFINED
-      /*---------------------------------------------------------------------*/
-      /* RunClimberWinch()                                                   */
-      /* Run the winch motor, to make the robot climb.                       */
-      /*---------------------------------------------------------------------*/
-   void RunClimberWinch( void ) {
-      static int iCallCount = 0;
-      iCallCount++;
-
-      if ( BUTTON_RUNCLIMBWINCH ){
-         m_motorClimberWinch.Set( ControlMode::PercentOutput, 0.5 );
-         if ( 0 == iCallCount%50 ) {
-            cout << "ClimberWinch Current: " << setw(5) <<
-                    m_motorClimberWinch.GetStatorCurrent() << "A" << endl;
-         }
-      } else { 
-         m_motorClimberWinch.Set( ControlMode::PercentOutput, 0.0 );
-      }
-   }      // RunClimberWinch()
-#endif
 
 
       /*---------------------------------------------------------------------*/
@@ -3015,8 +2918,6 @@ class Robot : public frc::TimedRobot {
       sCurrState.highGear = false;
       iCallCount++;
       sCurrState.teleop = false;
-      // new m_compressor(0);           // initialize compressor
-      // new m_compressor = frc::Compressor(0); // initialize compressor
 
       // Default to a length of 100 LEDs (300 total; 100 sets of 3);
       // start with empty output on all of them.
@@ -3243,14 +3144,6 @@ class Robot : public frc::TimedRobot {
    void TestPeriodic() override {
       GetAllVariables();
       iCallCount++;
-      #if 1 
-      //follow left wall
-             //pigeon/ADIS IMU units in trig directions, not compass directions
-      // FollowWall(23.0, 0.0, 0.0, 35.0, -25.0);
-      #else
-      //follow right wall
-      //FollowWall(0.0, 23.0, 0.0, -35.0, 35.0 );
-      #endif
       SwitchCameraIfNecessary();
 
       if ( 0 == iCallCount%10007 ) {                       // every 200 seconds
@@ -3331,6 +3224,17 @@ class Robot : public frc::TimedRobot {
       // static double dDesiredYaw = 0.0;
 
       GetAllVariables();
+
+                // Set joyZ value, so throttle calculations in Team4918Drive()
+                // turn out to be what we want them to be.
+                //    dThrottle = ( 1.0-sCurrState.joyZ ) / 2.0;
+                //    so 1.0 is minimal throttle, -1.0 is maximum)
+      // sCurrState.joyZ =  1.0;   // minimum speed (about .1 * full throttle)
+      // sCurrState.joyZ =  0.5;   // one-quarter speed
+      // sCurrState.joyZ =  0.0;   // half speed
+      // sCurrState.joyZ = -0.5;   // three-quarter speed
+      // sCurrState.joyZ = -1.0;   // full speed
+      sCurrState.joyZ = 0.5;   // one-quarter speed
 
       iCallCount++;
 
@@ -3455,13 +3359,10 @@ class Robot : public frc::TimedRobot {
 
       RunConveyor();
 
-//    RunColorWheel();
-
       RunClimberPole( m_motorLSClimber, m_LSClimberForwardLimitSwitch,
                                         m_LSClimberReverseLimitSwitch );
       RunClimberPole( m_motorRSClimber, m_RSClimberForwardLimitSwitch,
                                         m_RSClimberReverseLimitSwitch );
-//    RunClimberWinch();
       SwitchCameraIfNecessary();
 
       if ( 0 == iCallCount%100000 )  {   // every 20 seconds
