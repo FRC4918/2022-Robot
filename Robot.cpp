@@ -169,13 +169,12 @@ class Robot : public frc::TimedRobot {
       {   0,  M_DRIVE_STRAIGHT,     2.3,       0.0,         false },
       {   1,  M_DRIVE_STRAIGHT,     1.0,       0.0,          true },
       {   2,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
-      {   3,  M_ROTATE,             0.0,    -123.0,         false },
-      {   4,  M_DRIVE_STRAIGHT,     4.687,  -123.0,         false },
-      {   5,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {   6,  M_DRIVE_STRAIGHT,     0.5,     -30.0,         true  },
-      {   7,  M_ROTATE,             0.0,     -10.0,         false },
-      {   8,  M_STOP,               0.0,       0.0,         false },
-                     // will put shoot maneuver here...
+      {   3,  M_SHOOT,              0.0,       0.0,         false },
+      {   4,  M_ROTATE,             0.0,    -123.0,         false },
+      {   5,  M_DRIVE_STRAIGHT,     6.0,    -123.0,         false },
+      {   6,  M_DRIVE_STRAIGHT,     3.0,    -123.0,         true  },
+      {   7,  M_ROTATE,             0.0,     -33.0,         false },
+      {   8,  M_SHOOT,              0.0,     -33.0,         false },
       {   9,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
       {  10,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
@@ -404,9 +403,9 @@ class Robot : public frc::TimedRobot {
 #define BUTTON_RUNINTAKE            ( sCurrState.conButton[8] )
 #define BUTTON_RUNINTAKE_PREV       ( sPrevState.conButton[8] )
       // Console button  9 (the second-from-left of 4 missile switches)
-      // turns on manual conveyor mode.
-#define BUTTON_RUNCLIMBWINCH        ( sCurrState.conButton[ 9] )
-#define BUTTON_RUNCLIMBWINCH_PREV   ( sPrevState.conButton[ 9] )
+      // turns on fully-automatic conveyor-intake mode.
+#define BUTTON_AUTOCONVEYOR         ( sCurrState.conButton[ 9] )
+#define BUTTON_AUTOCONVEYOR_PREV    ( sPrevState.conButton[ 9] )
       // Console button 11 (the rightmost missile switch)
       // turns on manual conveyor mode.
 #define BUTTON_MANUALCONVEYOR       ( sCurrState.conButton[11] )
@@ -535,8 +534,8 @@ class Robot : public frc::TimedRobot {
       // units::time::second_t dTimeOfLastCall = (units::second_t) 0;
       static bool   prevSwitchToColorWheelCam = false;
 
-      int minCircleRadius = 24;       // these are the limits of radius that
-      int maxCircleRadius = 60;       // we look for
+      int minCircleRadius = 12;       // these are the limits of radius that
+      int maxCircleRadius = 50;       // we look for
 
       int iBiggestCircleIndex = -1;   // And these are the largest radiuses
       int iBiggestCircleRadius = -1;  // that we've found
@@ -549,13 +548,13 @@ class Robot : public frc::TimedRobot {
          WeAreOnRedAlliance = false;   // we are on blue alliance
       }
                   // "camera" is the camera connected to the outboard USB port
-      cs::UsbCamera camera = frc::CameraServer::StartAutomaticCapture(1);
+      cs::UsbCamera camera = frc::CameraServer::StartAutomaticCapture(0);
          //camera.SetResolution( 640, 480 );   // too detailed and slow
          //camera.SetResolution( 160, 120 );   // too coarse
       camera.SetResolution( 320, 240 );        // just right
                   // "camera2" is the camera connected to the inboard USB port
-      cs::UsbCamera camera2 = frc::CameraServer::StartAutomaticCapture(0);
-      camera2.SetResolution( 320, 240 );
+//    cs::UsbCamera camera2 = frc::CameraServer::StartAutomaticCapture(1);
+//    camera2.SetResolution( 320, 240 );
 
       cargoOnVideo.SeenByCamera = false;  // Make sure no other code thinks
       cargoOnVideo.X = 0;                 // we see a cargo ball until we
@@ -617,24 +616,23 @@ class Robot : public frc::TimedRobot {
 
          if ( cargoOnVideo.SwitchToColorWheelCam &&
               !prevSwitchToColorWheelCam ) {
-            cvSink.SetSource( camera2 );       // switch to rear "goal" camera
-            prevSwitchToColorWheelCam = cargoOnVideo.SwitchToColorWheelCam;
                                    // This camera has a wide field of view, so
                                    // the circles will be small
             minCircleRadius = 10;  // was 20         // minimum circle radius
-            maxCircleRadius = 40;  // was 56         // maximum circle radius
-         } else if ( !cargoOnVideo.SwitchToColorWheelCam &&
-                     prevSwitchToColorWheelCam ) {
-            cvSink.SetSource( camera ); // switch back to front "cargo" camera
-            prevSwitchToColorWheelCam = cargoOnVideo.SwitchToColorWheelCam;
+            maxCircleRadius = 50;  // was 56         // maximum circle radius
+//       } else if ( !cargoOnVideo.SwitchToColorWheelCam &&
+//                   prevSwitchToColorWheelCam ) {
+//          prevSwitchToColorWheelCam = cargoOnVideo.SwitchToColorWheelCam;
                                   // This camera has a narrow field of view, so
                                   // the circles will be larger
-            minCircleRadius = 16;  // was 20         // minimum circle radius
-            maxCircleRadius = 46;  // was 56         // maximum circle radius
+//          minCircleRadius = 16;  // was 20         // minimum circle radius
+//          maxCircleRadius = 46;  // was 56         // maximum circle radius
             bDiagnosticMode = !bDiagnosticMode;       // toggle diagnostic mode
-            cout << "liv says diagnostic mode was changed" <<endl;
+            cout << "liv says diagnostic mode was changed." <<endl;
             cout << bDiagnosticMode <<endl; 
+            cargoOnVideo.SwitchToColorWheelCam = false;
          }
+         prevSwitchToColorWheelCam = cargoOnVideo.SwitchToColorWheelCam;
 
                    // set the pointer to the frame to be sent to DriverStation
          if ( bDiagnosticMode ) {
@@ -723,6 +721,16 @@ class Robot : public frc::TimedRobot {
                   // std::cout << frc::GetTime() - dTimeOfLastCall << endl;
                                  // use frpc:Timer::GetFPGATimestamp() instead?
                }      // if on a 100-second boundary
+
+                                          // if in bottom-left corner (bumper)
+               if ( ( (int)v3fCircles[i][0] < 40  ) &&
+                    ( 220 < (int)v3fCircles[i][1] )   ) {
+                  continue;                                          // skip it
+                              // else if in bottom-right corner (bumper)
+               } else if ( ( 280 < (int)v3fCircles[i][0] ) &&
+                           ( 220 < (int)v3fCircles[i][1] )   ) {
+                  continue;                                          // skip it
+               }
 
                      // if a bigger circle has been found than any found before
                if ( iBiggestCircleRadius < (int)v3fCircles[i][2] ) {
@@ -826,18 +834,21 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void SwitchCameraIfNecessary( void ) {
              // Switch cameras if the "switch camera" button is newly-pressed.
+      // cargoOnVideo.SwitchToColorWheelCam = !BUTTON_SWITCHCAMERA_PREV &&
+      //                                       BUTTON_SWITCHCAMERA;
       if ( !BUTTON_SWITCHCAMERA_PREV &&
             BUTTON_SWITCHCAMERA         ) {
+         cargoOnVideo.SwitchToColorWheelCam = true;
 
-         cargoOnVideo.SwitchToColorWheelCam =
-                   !cargoOnVideo.SwitchToColorWheelCam;
+//       cargoOnVideo.SwitchToColorWheelCam =
+//                 !cargoOnVideo.SwitchToColorWheelCam;
 
-         cout << "Switching camera to ";
-         if ( cargoOnVideo.SwitchToColorWheelCam ) {
-            cout << "GoalCam" << endl;
-         } else {
-            cout << "CargoCam" << endl;
-         }
+         cout << "Switching camera." << endl;
+//       if ( cargoOnVideo.SwitchToColorWheelCam ) {
+//          cout << "GoalCam" << endl;
+//       } else {
+//          cout << "CargoCam" << endl;
+//       }
       }
    }
 
@@ -1244,9 +1255,16 @@ class Robot : public frc::TimedRobot {
                           // 1.0 when pushed all the way forward -- then
                           // multiply that number by both axes to scale them.
       dThrottle = ( 1.0-sCurrState.joyZ ) / 2.0;
-      std::min( 0.1, dThrottle );
+                    // square it so its more sensitive at low throttle settings
+      dThrottle = dThrottle * dThrottle;
+      dThrottle = std::max( 0.01, dThrottle );
+      dThrottle = std::min( 1.0,  dThrottle );
       desiredForward = desiredForward * dThrottle;
       desiredTurn    = desiredTurn    * dThrottle;
+      if ( 19 == iCallCount%200 ) {
+         cout << "Throttle/forward/turn " << dThrottle << "/"
+	      << desiredForward << "/" << desiredTurn << endl;
+      }
 #ifdef SAFETY_LIMITS
                            // for safety: allow limited range only -0.5 to 0.5
       desiredForward = std::min(  0.5, desiredForward );
@@ -1557,11 +1575,12 @@ class Robot : public frc::TimedRobot {
       static int  iCallCount = 0;
 
       iCallCount++;
-      if (  sCurrState.cargoInIntake ) {          // if cargo ball in intake
-         m_motorIntake.Set( ControlMode::PercentOutput,  0.6 ); // be gentle
-      } else {
-         m_motorIntake.Set( ControlMode::PercentOutput,  0.6 ); // be strong
-      }
+//    if (  sCurrState.cargoInIntake ) {          // if cargo ball in intake
+//       m_motorIntake.Set( ControlMode::PercentOutput,  0.6 ); // be gentle
+//    } else {
+//       m_motorIntake.Set( ControlMode::PercentOutput,  0.6 ); // be strong
+//    }
+      RunIntake();
       RunConveyor();
 
       if ( cargoOnVideo.SeenByCamera ) {          // if USB video data is valid
@@ -2050,12 +2069,10 @@ class Robot : public frc::TimedRobot {
                !( sPrevState.conX > 0.5 ) ) {
          TSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
-//       m_motorTopShooter.Set( ControlMode::Velocity, 
-//                              TSMotorState.targetVelocity_UnitsPer100ms );
-//       m_motorBotShooter.Set( ControlMode::Velocity, 
-//                              BSMotorState.targetVelocity_UnitsPer100ms );
-         m_motorTopShooter.Set( ControlMode::PercentOutput, 0.5 );  // test
-         m_motorBotShooter.Set( ControlMode::PercentOutput, 0.5 );  // test
+         m_motorTopShooter.Set( ControlMode::Velocity, 
+                                TSMotorState.targetVelocity_UnitsPer100ms );
+         m_motorBotShooter.Set( ControlMode::Velocity, 
+                                BSMotorState.targetVelocity_UnitsPer100ms );
       } else if ( !( sCurrState.conX < 0.5 ) && //newly released rightward
                    ( sPrevState.conX < 0.5 ) ) {
          TSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
@@ -2144,6 +2161,67 @@ class Robot : public frc::TimedRobot {
 
 
       /*---------------------------------------------------------------------*/
+      /* RunIntake()                                                         */
+      /* Run the intake motor, to move balls into the robot.                 */
+      /*---------------------------------------------------------------------*/
+   void RunIntake( void ) {
+
+      if ( BUTTON_AUTOCONVEYOR ) {  // If fully-automatic conveyor is selected
+                // If there is no cargo in intake, then we can run the intake;
+                // or if no cargo at position 5, then we can run the intake.
+                // But if cargo at both places, then we have 2 cargo already
+                // and cannot accept any more, so don't want to run the intake.
+                // So we only run the intake if the driver is driving forward,
+                // and either of those locations has no cargo.
+         if ( !BUTTON_REVERSE &&
+              ( !sCurrState.cargoInIntake ||
+                !sCurrState.cargoInPosition5 ) ) {
+            sCurrState.iIntakePercent = 0.6;
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.6 );
+         } else {
+            sCurrState.iIntakePercent = 0.0;
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
+	 }
+
+      } else if ( BUTTON_RUNINTAKE )   {                 // Run intake forward.
+         if (  sCurrState.cargoInIntake ) {       // if a cargo ball in intake
+            sCurrState.iIntakePercent = 0.6;
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.6 ); // be gentle
+         } else {
+            sCurrState.iIntakePercent = 0.6;
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.6 ); // be strong
+         }
+                            // If necessary (for any reason), stop the intake.
+                                 // if the "RUN INTAKE" button was previously
+                                 // pressed (we were in manual intake mode)
+      } else if ( BUTTON_RUNINTAKE_PREV ) {
+         sCurrState.iIntakePercent = 0;                // Then stop the intake.
+         m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
+                                 // or if button 1 was previously pressed
+                                 // and button 2 was not previously pressed
+                                 // (which would have caused us to call
+                                 // DriveToCargo, which runs the intake).
+      } else if ( BUTTON_TARGET_PREV && !BUTTON_REVERSE_PREV ) {
+         sCurrState.iIntakePercent = 0;                // Then stop the intake.
+         m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
+                    // Or if we were previously driving the conveyor backwards
+                    // manually, but are not doing that now (we just stopped)
+      } else if ( BUTTON_MANUALCONVEYOR_PREV && BUTTON_CONVEYORBACKWARD_PREV &&
+                  ( !BUTTON_MANUALCONVEYOR || ! BUTTON_CONVEYORBACKWARD ) ) {
+            sCurrState.iIntakePercent = 0;            // Then stop the intake.
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
+      } else {
+              // No reason to run the intake, so every once in a while stop it.
+         if ( 17 == iCallCount%100 ) {                // Every 2 seconds
+            sCurrState.iIntakePercent = 0;            // stop the intake.
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
+         }
+      }
+
+   }   // RunIntake()
+
+
+      /*---------------------------------------------------------------------*/
       /* RunConveyor()                                                       */
       /* Run the conveyor belt motors, to move balls into and through the    */
       /* conveyor system.                                                    */
@@ -2166,56 +2244,47 @@ class Robot : public frc::TimedRobot {
             cout << "cargo ball NOT in position 5" << endl; 
          } 
       }
-      if ( BUTTON_MANUALCONVEYOR ) {               // Is manual mode selected?
                                  // If driver is pushing BOTH conveyor buttons
-         if ( BUTTON_CONVEYORFORWARD && BUTTON_CONVEYORBACKWARD ) {
+      if ( BUTTON_CONVEYORFORWARD && BUTTON_CONVEYORBACKWARD ) {
                    // Then run the conveyor according to the Joystick throttle
-            m_motorConveyMaster.Set( ControlMode::PercentOutput,
-                                     -0.5*sCurrState.joyZ );
-            m_motorIntake.Set( ControlMode::PercentOutput,
-                               -1.0 * sCurrState.joyZ );
-         } else if ( BUTTON_CONVEYORFORWARD )   {     // Run conveyor forward.
-            sCurrState.iConveyPercent = 80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.8 );
-         } else if ( BUTTON_CONVEYORBACKWARD ) {     // Run conveyor backward.
-            sCurrState.iConveyPercent =  -80;
-            m_motorConveyMaster.Set( ControlMode::PercentOutput, -0.8 );
-            sCurrState.iIntakePercent = -60;     // Run intake backwards, too.
-            m_motorIntake.Set( ControlMode::PercentOutput, -0.6 );
-         } else {                                         // Stop the conveyor.
-           sCurrState.iConveyPercent = 0;
-           if (BUTTON_CONVEYORFORWARD_PREV||BUTTON_CONVEYORBACKWARD_PREV) {
-              m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.0);
-              sCurrState.iIntakePercent = 0;         // Stop the conveyor, too.
-              m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
-           }
-         }
-      } else {
-         if ( !(sCurrState.conX > 0.5) && !(sCurrState.conY > 0.5) && 
-              !(sCurrState.conY < -0.5) ) {
-            static int ConveyorCounter = 0;
-            if ( sCurrState.cargoInIntake &&
+         sCurrState.iConveyPercent = -0.5*sCurrState.joyZ;
+         m_motorIntake.Set( ControlMode::PercentOutput,
+                            -1.0 * sCurrState.joyZ );
+      } else if ( BUTTON_CONVEYORFORWARD )   {        // Run conveyor forward.
+         sCurrState.iConveyPercent = 80;
+      } else if ( BUTTON_CONVEYORBACKWARD ) {     // Run conveyor backward.
+         sCurrState.iConveyPercent =  -80;
+         sCurrState.iIntakePercent = -60;     // Run intake backwards, too.
+         m_motorIntake.Set( ControlMode::PercentOutput, -0.6 );
+                                          // else if the shooter isn't running
+      } else if ( !(sCurrState.conX > 0.5) && !(sCurrState.conY > 0.5) && 
+                  !(sCurrState.conY < -0.5) ) {
+                        // run the conveyor as needed (when cargo is in intake)
+                        // unless in manual conveyor mode
+         static int ConveyorCounter = 0;
+         if ( !BUTTON_MANUALCONVEYOR &&
+               sCurrState.cargoInIntake &&
               !sCurrState.cargoInPosition5 ) {
-              sCurrState.iConveyPercent = 60;
-              m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.3 );
-              ConveyorCounter = 6;
-            } else if ( ( 0 < ConveyorCounter ) &&
-                        !sCurrState.cargoInPosition5 ) {
-              sCurrState.iConveyPercent = 60;
-              m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.3 );
-              ConveyorCounter--;
-            } else {
+           sCurrState.iConveyPercent = 60;
+           ConveyorCounter = 6;
+         } else if ( !BUTTON_MANUALCONVEYOR && ( 0 < ConveyorCounter ) &&
+                     !sCurrState.cargoInPosition5 ) {
+           sCurrState.iConveyPercent = 60;
+           ConveyorCounter--;
+         } else {
             //if (  sPrevState.cargoInIntake && 
             //     !sPrevState.cargoInPosition5 ) {
-                sCurrState.iConveyPercent = 0;
-                m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.0 );
+             sCurrState.iConveyPercent = 0;
             // }
-            } 
-         }
+         } 
       }
       if ( sPrevState.iConveyPercent != sCurrState.iConveyPercent ) {
          m_motorConveyMaster.Set( ControlMode::PercentOutput,
                                   (double)sCurrState.iConveyPercent / 100.0 );
+      } else if ( 19 == iCallCount%100 ) {
+         sCurrState.iConveyPercent = 0;
+         m_motorConveyMaster.Set( ControlMode::PercentOutput,
+                                  (double)sCurrState.iConveyPercent / 0.0 );
       }
    }   // RunConveyor()
 
@@ -2649,7 +2718,7 @@ class Robot : public frc::TimedRobot {
          sPrevState.conX = 0.0;
          sCurrState.conX = 1.0;
          RunShooter();
-         // Shoot();
+         Shoot();
          if ( mSeqPrev.type != mSeq.type ) {          // first call to M_SHOOT?
             iShootCount = 200;  // yes; stay in M_SHOOT for at least 4 seconds
          } else if ( ( iShootCount < 100 ) &&         // else if at least
@@ -3177,10 +3246,11 @@ class Robot : public frc::TimedRobot {
    void AutonomousInit() override {
       RobotInit();
       m_compressor.EnableDigital();
-      limenttable->PutNumber( "ledMode", 3 );                   // turn LEDs on
+//      limenttable->PutNumber( "ledMode", 3 );                   // turn LEDs on
       cout << "shoot 3 balls" << endl;
       // m_drive.StopMotor();
       iCallCount=0;
+      m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kReverse);
       GetAllVariables();
       sCurrState.teleop = false;
       sCurrState.initialYaw = sCurrState.yawPitchRoll[0]; 
@@ -3234,16 +3304,14 @@ class Robot : public frc::TimedRobot {
       // sCurrState.joyZ =  0.0;   // half speed
       // sCurrState.joyZ = -0.5;   // three-quarter speed
       // sCurrState.joyZ = -1.0;   // full speed
-      sCurrState.joyZ = 0.5;   // one-quarter speed
+// Comment this line out to test with actual throttle paddle
+//    sCurrState.joyZ = 0.5;   // one-quarter speed
 
       iCallCount++;
 
-      if (  sCurrState.cargoInIntake ) {       // if a cargo ball in intake
-         m_motorIntake.Set( ControlMode::PercentOutput,  0.1 ); // be gentle
-      } else {
-         m_motorIntake.Set( ControlMode::PercentOutput,  0.4 ); // be strong
-      }
 
+      BUTTON_AUTOCONVEYOR = true;    // Select fully-auto intake/conveyor mode
+      RunIntake();
       RunConveyor();
 
       // m_drive.StopMotor();
@@ -3317,7 +3385,9 @@ class Robot : public frc::TimedRobot {
       // cout << "yawrate: " << sCurrState.rateXYZ[2] << endl;
       //m_motorIntake.Set(ControlMode::PercentOutput,  0.4);
 
-      if ( BUTTON_RUNINTAKE )   {                        // Run intake forward.
+      if ( BUTTON_AUTOCONVEYOR ) {  // If fully-automatic conveyor is selected
+
+      } else if ( BUTTON_RUNINTAKE )   {                 // Run intake forward.
          if (  sCurrState.cargoInIntake ) {       // if a cargo ball in intake
             m_motorIntake.Set( ControlMode::PercentOutput, 0.6 ); // be gentle
          } else {
@@ -3357,6 +3427,7 @@ class Robot : public frc::TimedRobot {
 
       Shoot();
 
+      RunIntake();
       RunConveyor();
 
       RunClimberPole( m_motorLSClimber, m_LSClimberForwardLimitSwitch,
