@@ -2315,13 +2315,13 @@ class Robot : public frc::TimedRobot {
             m_motorClimberPole.Set( 0.10 );
          } else {
                                                    // apply full climbing power
-            m_motorClimberPole.Set( 0.95 );
+            m_motorClimberPole.Set( 0.7 );
             // if ( m_ClimberForwardLimitSwitch.Get() ) {
-               limitSwitchHasBeenHit = true;
+            //   limitSwitchHasBeenHit = true;
             // }
          }
       } else if (BUTTON_CLIMBERDOWN ) {
-         m_motorClimberPole.Set( -0.95 );
+         m_motorClimberPole.Set( -0.7 );
            
       } else { 
          // Else neither button is currently being pressed.  If either was
@@ -3178,12 +3178,13 @@ class Robot : public frc::TimedRobot {
                }
             } else {
                              // advancing orange LEDS, separated by unlit LEDs
-               if ( iBufNum == iLEDNum % kNumLEDBufs ) {
-                  m_ledBufferArr[iBufNum][iLEDNum].SetHSV( 30, 255, 32 );
-               } else {
-                  m_ledBufferArr[iBufNum][iLEDNum].SetHSV(
-                                     (iLEDNum*180)/kLEDStripLength, 255, 16 );
-               }
+               // if ( iBufNum == iLEDNum % kNumLEDBufs ) {
+               //    m_ledBufferArr[iBufNum][iLEDNum].SetHSV( 255, 0, 0 );
+               // } else {
+               //    m_ledBufferArr[iBufNum][iLEDNum].SetHSV(
+               //                       (iLEDNum*180)/kLEDStripLength, 255, 16 );
+               // }
+               m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 125, 255, 0 );
             }
          }
       }
