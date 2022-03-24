@@ -345,6 +345,8 @@ class Robot : public frc::TimedRobot {
       bool   cargoInPosition5;
       bool   highGear;
       bool   teleop;
+      double dLimelightDistanceToGoal;
+      double dLimelightDesiredShooterSpeed;
    } sCurrState, sPrevState;
 
       // Joystick button 1 (the "trigger" switch on the front of the joystick)
@@ -2087,23 +2089,94 @@ class Robot : public frc::TimedRobot {
          m_motorBotShooter.Set( ControlMode::Velocity, 
                                 BSMotorState.targetVelocity_UnitsPer100ms );
       /***End of testing code***/
+                     // If commanded to shoot based on the limelight data
+                     // (this is the same if statement used elsewhere to
+                     //  decide if DriveToLimelightTarget() should be called).
+      } else if ( BUTTON_TARGET && BUTTON_REVERSE && ( 1  == limev ) ) {
+                   // The goal is 104 inches from the floor,
+                   // the limelight is 22 inches from the floor, and
+                   // the limelight is angled 27.7 degrees above horizontal;
+                   // so this equation gives us the distance, in feet, for any
+                   // limelight Y value (Y is degrees above the centerline, or
+                   // below the centerline if negative).
+         if ( limey < -20.0 ) {
+            limey = -20.0;
+         } else if ( 50.0 < limey ) {
+            limey = 50.0;
+         }
+         sCurrState.dLimelightDistanceToGoal = (104.0 - 22.0)/12.0 /
+                                        tan( (27.7 + limey) * 3.14159 / 180 );
+         if ( sCurrState.dLimelightDistanceToGoal < 6.0 ) {
+            sCurrState.dLimelightDistanceToGoal = 6.0;
+         } else if ( 18.0 < sCurrState.dLimelightDistanceToGoal ) {
+            sCurrState.dLimelightDistanceToGoal = 18.0;
+         }
+                   // The shooter needs to be at about 2100 RPM (top shooter)
+                   // just to get the cargo ball up to the height of the goal,
+                   // and a goal can be scored at that RPM at about 6' from
+                   // the goal.  After that initial speed requirement, the
+                   // distance covered by the shooter in a vacuum would be
+                   // proportional to the square of the exit speed of the
+                   // cargo ball:
+                   //     distance beyond 6' = (some constant)*rpm*rpm
+                   // where "rpm" is the RPM above 2000.  But the effects of
+                   // drag make higher speeds less effective than RPM squared.
+                   // By measuring several different speeds and distances on
+                   // the actual robot, we found these values for the shooter
+                   // motors' RPMs would shoot well into the upper goal
+                   //     6' --> 2100 RPM top, 2050 RPM bottom
+                   //     9' --> 2300(?) RPM top, 2250(?) RPM bottom
+                   //    12' --> 2600 RPM top, 2400 RPM bottom
+                   //    15' --> 3000 RPM top, 2950 RPM bottom
+                   // Our limited measurements show that a simple linear
+                   // equation does a good a job of fitting the data.
+                   // To simplify a little bit, we will use an equation
+                   // to find the RPM of the top shooter, and set the
+                   // bottom shooter to 50 RPM below that.
+                   // The equation below works well (it produces results
+                   // which fit all the points above very well):
+         if ( sCurrState.dLimelightDistanceToGoal < 6.0 ) {
+            sCurrState.dLimelightDesiredShooterSpeed = 2100.0;
+         } else {
+                // This equation gives 2100 RPM at  6', 2400 RPM at 9',
+                //                     2700 RPM at 12', 3000 RPM at 15'.
+                //   sCurrState.dLimelightDesiredShooterSpeed = 1500.0 +
+                //                100.0 * sCurrState.dLimelightDistanceToGoal;
+                // But this equation does better; it gives
+                //                     2111 RPM at  6', 2255 RPM at 9',
+                //                     2536 RPM at 12', 3000 RPM at 15'.
+           sCurrState.dLimelightDesiredShooterSpeed = 2050.0 +
+                     0.2815 * sCurrState.dLimelightDistanceToGoal *
+                              sCurrState.dLimelightDistanceToGoal *
+                              sCurrState.dLimelightDistanceToGoal;
+         }
+         if ( 3100.0 < sCurrState.dLimelightDesiredShooterSpeed ) {
+            sCurrState.dLimelightDesiredShooterSpeed = 3100.0;
+         }
+                 // Command the motors to turn 100 RPM faster than we need,
+                 // to ensure they can actually reach the speed we need.
+                 // The Shoot() function will run the conveyor to transport
+                 // the cargo balls into the shooter when
+                 // dLimelightDesiredShooterSpeed is reached
+                 // (dLimelightDesiredShooterSpeed-50 for the bottom motor).
+         TSMotorState.targetVelocity_UnitsPer100ms =
+              (sCurrState.dLimelightDesiredShooterSpeed + 100.0) * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =
+              (sCurrState.dLimelightDesiredShooterSpeed +  50.0) * 4096 / 600;
+         m_motorTopShooter.Set( ControlMode::Velocity,
+                                TSMotorState.targetVelocity_UnitsPer100ms );
+         m_motorBotShooter.Set( ControlMode::Velocity,
+                                BSMotorState.targetVelocity_UnitsPer100ms );
+
       } else if ( ( -0.5 < sCurrState.conY       ) && 
                   (        sCurrState.conY < 0.5 ) ) {
-                       // if we're trying to shoot based on the limelight data
-//       if ( BUTTON_TARGET && BUTTON_REVERSE &&
-//                ( 1  == limev )                ) {
-//          double dLimelightDistance;
-//          dLimelightDistance = (104.0 - 22.0)/12.0 /
-//                                      tan( (27.7 + limey) * 3.14159 / 180 );
-// 
-//       } else {
                                    // else spin the shooter motors down slowly
-            m_motorTopShooter.Set( ControlMode::Velocity,
-               0.95 * (double)m_motorTopShooter.GetSelectedSensorVelocity() );
-            m_motorBotShooter.Set(ControlMode::Velocity,
-               0.95 * (double)m_motorBotShooter.GetSelectedSensorVelocity() );
-//       }
+         m_motorTopShooter.Set( ControlMode::Velocity,
+            0.95 * (double)m_motorTopShooter.GetSelectedSensorVelocity() );
+         m_motorBotShooter.Set(ControlMode::Velocity,
+            0.95 * (double)m_motorBotShooter.GetSelectedSensorVelocity() );
       } 
+
       if ( 0 == iCallCount%100 )  {   // every 2 seconds (at 2.00)
          if ( 100.0 < abs(m_motorTopShooter.GetSelectedSensorVelocity()) ) {
             MotorDisplay( "TS:", m_motorTopShooter, TSMotorState );
@@ -2162,6 +2235,28 @@ class Robot : public frc::TimedRobot {
          sCurrState.iConveyPercent = 0;
          m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.0 );
          m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
+
+                     // If commanded to shoot based on the limelight data
+                     // (this is the same if statement used elsewhere to
+                     //  decide if DriveToLimelightTarget() should be called).
+      } else if ( BUTTON_TARGET && BUTTON_REVERSE && ( 1 == limev ) ) {
+         if ( ( sCurrState.dLimelightDesiredShooterSpeed * 4096 / 600 <
+                   abs( m_motorTopShooter.GetSelectedSensorVelocity() ) ) &&
+              ( (sCurrState.dLimelightDesiredShooterSpeed-50.0) * 4096 / 600 <
+                   abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
+                                         // run the conveyor to shoot the balls
+            sCurrState.iConveyPercent = 100;
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, 1.0 );
+            m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
+         }
+                     // Else if we were previously shooting under the control
+                     // of the limelight, and now are not
+      } else if ( BUTTON_TARGET_PREV && BUTTON_REVERSE_PREV ) { 
+                                           // Then turn off conveyor and intake
+         sPrevState.iConveyPercent = 0;
+         sCurrState.iConveyPercent = 0;
+         m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.0 );
+         m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
       }
    }    // Shoot()
 
@@ -2187,7 +2282,7 @@ class Robot : public frc::TimedRobot {
          } else {
             sCurrState.iIntakePercent = 0.0;
             m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
-	 }
+         }
 
       } else if ( BUTTON_RUNINTAKE )   {                 // Run intake forward.
          if (  sCurrState.cargoInIntake ) {       // if a cargo ball in intake
@@ -2264,7 +2359,8 @@ class Robot : public frc::TimedRobot {
          m_motorIntake.Set( ControlMode::PercentOutput, -0.6 );
                                           // else if the shooter isn't running
       } else if ( !(sCurrState.conX > 0.5) && !(sCurrState.conY > 0.5) && 
-                  !(sCurrState.conY < -0.5) ) {
+                  !(sCurrState.conY < -0.5) &&
+                  !( BUTTON_TARGET && BUTTON_REVERSE && ( 1 == limev ) ) ) {
                         // run the conveyor as needed (when cargo is in intake)
                         // unless in manual conveyor mode
          static int ConveyorCounter = 0;
