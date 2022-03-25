@@ -151,7 +151,9 @@ class Robot : public frc::TimedRobot {
    };
 
    int mSeqIndex = 0;
-
+   
+   bool autoConveyor;
+   bool searchMode = false;
                // Create a sequence of full maneuvers
    struct maneuver mSeq[256] =
    {
@@ -165,11 +167,11 @@ class Robot : public frc::TimedRobot {
      //                          distance  (degrees,          to
      // index command             (feet)    positive left)  cargo ball?
      // ----- ----------------     ----     --------        -----
-      // index 0: (5-ball autonomous ballgrabber/shooter sequence)
+      // index 0: 3 ball autonomous
       {   0,  M_DRIVE_STRAIGHT,     2.3,       0.0,         false },
-      {   1,  M_DRIVE_STRAIGHT,     1.0,       0.0,          true },
-      {   2,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
-      {   3,  M_SHOOT,              0.0,       0.0,         false },
+      {   1,  M_DRIVE_STRAIGHT,     1.0,       0.0,         false }, // was true, removed to isolate from vision bugs
+      {   2,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false }, 
+      {   3,  M_SHOOT,              0.0,       0.0,         false }, // shoots with whatever is on conX (Medium)
       {   4,  M_ROTATE,             0.0,    -123.0,         false },
       {   5,  M_DRIVE_STRAIGHT,     6.0,    -123.0,         false },
       {   6,  M_DRIVE_STRAIGHT,     3.0,    -123.0,         true  },
@@ -188,8 +190,8 @@ class Robot : public frc::TimedRobot {
       {  18,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  19,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
-      // index 20: (simple autonomous "drive, grab cargo, shoot" sequence)
-      {  20,  M_DRIVE_STRAIGHT,     1.0,       0.0,         false },
+      // index 20: simple drive autonomous
+      {  20,  M_DRIVE_STRAIGHT,     4.0,       0.0,         false },
       {  21,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 //    {  21,  M_DRIVE_STRAIGHT,     1.0,       0.0,          true },
       {  22,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
@@ -211,16 +213,16 @@ class Robot : public frc::TimedRobot {
       {  38,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  39,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
-      // index 40:
-      {  40,  M_TURN_LEFT,          0.0,     360.0,         false },
-      {  41,  M_DRIVE_STRAIGHT,    10.0,     360.0,         false },
-      {  42,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {  43,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      // index 40: 2 ball autonomous, no vision needed
+      {  40,  M_DRIVE_STRAIGHT,     2.3,       0.0,         false },
+      {  41,  M_DRIVE_STRAIGHT,     1.0,       0.0,         false }, // was true, removed to isolate from vision bugs
+      {  42,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
+      {  43,  M_SHOOT,              0.0,       0.0,         false }, // shoots with whatever is on conX (Medium)
       {  44,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  45,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
-      {  46,  M_TURN_RIGHT,         0.0,       0.0,         false },
-      {  47,  M_ROTATE,             0.0,     360.0,         false },
-      {  48,  M_ROTATE,             0.0,       0.0,         false },
+      {  46,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  47,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
+      {  48,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  49,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  50,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  51,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
@@ -373,49 +375,45 @@ class Robot : public frc::TimedRobot {
 
       // Console button  1 (the left-top pushbutton switch on the console)
       // runs the climber up.
-#define BUTTON_CLIMBERUP            ( sCurrState.conButton[1] )
-#define BUTTON_CLIMBERUP_PREV       ( sPrevState.conButton[1] )
-      // Console button  2 (the center-top pushbutton switch on the console)
-      // runs the conveyor forward, when in manual conveyor mode (switch 11).
-#define BUTTON_CONVEYORFORWARD      ( sCurrState.conButton[2] )
-#define BUTTON_CONVEYORFORWARD_PREV ( sPrevState.conButton[2] )
+#define BUTTON_BLUECLIMBERUP            ( sCurrState.conButton[3] )
+#define BUTTON_BLUECLIMBERUP_PREV       ( sPrevState.conButton[1] )
+#define BUTTON_REDCLIMBERUP            ( sCurrState.conButton[4] )
+#define BUTTON_REDCLIMBERUP_PREV       ( sPrevState.conButton[2] )
+      // Console button  5 (the center-top pushbutton switch on the console)
+      // runs the conveyor forward.
+#define BUTTON_CONVEYORFORWARD      ( sCurrState.conButton[5] )
+#define BUTTON_CONVEYORFORWARD_PREV ( sPrevState.conButton[5] )
       // Console button  3 (the right-top pushbutton switch on the console)
       // runs the climber down.
-#define BUTTON_CLIMBERDOWN          ( sCurrState.conButton[3] )
-#define BUTTON_CLIMBERDOWN_PREV     ( sPrevState.conButton[3] )
+#define BUTTON_BLUECLIMBERDOWN          ( sCurrState.conButton[1] )
+#define BUTTON_BLUECLIMBERDOWN_PREV     ( sPrevState.conButton[3] )
+#define BUTTON_REDCLIMBERDOWN           ( sCurrState.conButton[2] )
+#define BUTTON_REDCLIMBERDOWN_PREV      ( sPrevState.conButton[4] )
       // Console button  4 (the centermost pushbutton switch on the console)
-      // runs the conveyor backward, when in manual conveyor mode (switch 11).
-#define BUTTON_CONVEYORBACKWARD      ( sCurrState.conButton[4] )
-#define BUTTON_CONVEYORBACKWARD_PREV ( sPrevState.conButton[4] )
-      // Console button  5 (rightmost center pushbutton switch on the console)
-      // switches USB cameras, in case they were initialized in a different
-      // order than usual.
-#define BUTTON_SWITCHCAMERA         ( sCurrState.conButton[5] )
-#define BUTTON_SWITCHCAMERA_PREV    ( sPrevState.conButton[5] )
+      // runs the conveyor backward.
+#define BUTTON_CONVEYORBACKWARD        ( sCurrState.conButton[8] )
+#define BUTTON_CONVEYORBACKWARD_PREV   ( sPrevState.conButton[8] )
+      // No button currently set for camera switching
+      // 13 does not exist
+      // defines kept for future debugging use
+#define BUTTON_SWITCHCAMERA           ( sCurrState.conButton[13] )
+#define BUTTON_SWITCHCAMERA_PREV      ( sPrevState.conButton[13] )
       // Console button  6 (leftmost bottom pushbutton switch on the console)
       // flips up the color wheel
-#define BUTTON_EXTENDCOLORWHEEL      ( sCurrState.conButton[6] )
-#define BUTTON_EXTENDCOLORWHEEL_PREV ( sPrevState.conButton[6] )
-      // Console button  7 (center bottom pushbutton switch on the console)
-      // runs the color wheel
-#define BUTTON_RUNCOLORWHEEL        ( sCurrState.conButton[7] )
-#define BUTTON_RUNCOLORWHEEL_PREV   ( sPrevState.conButton[7] )
+#define BUTTON_UPPYDOWNEY             ( sCurrState.conButton[6] )
+#define BUTTON_UPPYDOWNEY_PREV        ( sPrevState.conButton[6] )
       // Console button  8 (rightmost bottom pushbutton switch on the console)
       // turns on the intake motor
-#define BUTTON_RUNINTAKE            ( sCurrState.conButton[8] )
-#define BUTTON_RUNINTAKE_PREV       ( sPrevState.conButton[8] )
-      // Console button  9 (the second-from-left of 4 missile switches)
-      // turns on fully-automatic conveyor-intake mode.
-#define BUTTON_AUTOCONVEYOR         ( sCurrState.conButton[ 9] )
-#define BUTTON_AUTOCONVEYOR_PREV    ( sPrevState.conButton[ 9] )
-      // Console button 11 (the rightmost missile switch)
-      // turns on manual conveyor mode.
-#define BUTTON_MANUALCONVEYOR       ( sCurrState.conButton[11] )
-#define BUTTON_MANUALCONVEYOR_PREV  ( sPrevState.conButton[11] )
+#define BUTTON_RUNINTAKE              ( sCurrState.conButton[7] )
+#define BUTTON_RUNINTAKE_PREV         ( sPrevState.conButton[7] )
       // Console button 12 (the leftmost missile switch)
       // turns on cartesian (field-oriented) drive.
-#define BUTTON_CARTESIANDRIVE       ( sCurrState.conButton[12] )
-#define BUTTON_CARTESIANDRIVE_PREV  ( sPrevState.conButton[12] )
+//#define BUTTON_CARTESIANDRIVE       ( sCurrState.conButton[12] )
+//#define BUTTON_CARTESIANDRIVE_PREV  ( sPrevState.conButton[12] )
+#define BUTTON_SWITCH1 ( sCurrState.conButton[12] )
+#define BUTTON_SWITCH2 ( sCurrState.conButton[9]  )
+#define BUTTON_SWITCH3 ( sCurrState.conButton[10] )
+#define BUTTON_SWITCH4 ( sCurrState.conButton[11] )
 
    struct sMotorState {
       double targetVelocity_UnitsPer100ms;
@@ -921,8 +919,8 @@ class Robot : public frc::TimedRobot {
          sCurrState.yawRateEstimate = sCurrState.rateXYZ[2];
          if ( 30.0 < abs( sCurrState.yawRateEstimate -
                           sPrevState.yawRateEstimate   ) ) {
-            cout << "yawRate correction: " << sPrevState.yawRateEstimate <<
-                    "/" << sCurrState.yawRateEstimate << endl;
+         // MM; cout << "yawRate correction: " << sPrevState.yawRateEstimate <<
+                     // "/" << sCurrState.yawRateEstimate << endl;
          }
       } else { // Else the gyro hasn't updated the yaw rate (it only seems
                // to update every 0.1 second), so we estimate the current
@@ -1026,7 +1024,7 @@ class Robot : public frc::TimedRobot {
       if ( ( -0.045 < adjustedJoyY ) && ( adjustedJoyY < 0.025 ) ) {
          adjustedJoyY = 0.0;
       } else {
-         if ( BUTTON_CARTESIANDRIVE ) {     // if in field-oriented drive mode
+         if ( false ) {     // formerly BUTTON_CARTESIANDRIVE
             adjustedJoyY = -sCurrState.joyY;               // just invert joyY
          } else {                  // else in normal robot-oriented drive mode
             if ( BUTTON_REVERSE ) {          // if "reverse" button is pressed
@@ -1041,7 +1039,7 @@ class Robot : public frc::TimedRobot {
       if ( ( -0.105 < adjustedJoyX ) && ( adjustedJoyX < 0.025 ) ) {
          adjustedJoyX = 0.0;
       } else {
-         if ( !BUTTON_CARTESIANDRIVE ) { // if not in field-oriented drive mode
+         if ( true ) { // formerly !BUTTON_CARTESIANDRIVE
             adjustedJoyX = sCurrState.joyX*abs(sCurrState.joyX);
          }
       }
@@ -1056,7 +1054,7 @@ class Robot : public frc::TimedRobot {
           // more accurate driver control.  It increases fine control
           // at low speeds, but still permits full power when the
           // joystick is thrown all the way to its limit.
-      if ( !BUTTON_CARTESIANDRIVE ) { // if not in field-oriented drive mode
+      if ( true ) { // formerly !BUTTON_CARTESIANDRIVE
          adjustedJoyY = std::copysign( adjustedJoyY * adjustedJoyY,
                                        adjustedJoyY );
          adjustedJoyX = std::copysign( adjustedJoyX * adjustedJoyX,
@@ -1256,7 +1254,12 @@ class Robot : public frc::TimedRobot {
                           // with 0.1 when pulled all the way backward and
                           // 1.0 when pushed all the way forward -- then
                           // multiply that number by both axes to scale them.
-      dThrottle = ( 1.0-sCurrState.joyZ ) / 2.0;
+      if ( !searchMode ) {
+         dThrottle = ( 1.0-sCurrState.joyZ ) / 2.0;
+      } else {
+         dThrottle = 0.5;
+      }
+      
                     // square it so its more sensitive at low throttle settings
       dThrottle = dThrottle * dThrottle;
       dThrottle = std::max( 0.01, dThrottle );
@@ -1437,7 +1440,7 @@ class Robot : public frc::TimedRobot {
               //    positive joyX is toward the right
               //                                (the 270-degree direction) ).
 
-      if ( BUTTON_CARTESIANDRIVE ) {
+      if ( false ) { //formerly BUTTON_CARTESIANDRIVE
          DriveCartesianByJoystick();
       } else {
          desiredForward = sCurrState.joyY;
@@ -1537,12 +1540,12 @@ class Robot : public frc::TimedRobot {
          // for the offset of the camera away from the centerline of the robot.
          if ( aBooleanVariable ) {
             Team4918Drive( -autoDriveSpeed, 0.0 );
-         } else if ( 0 <= limex )  {
+         } else if ( (limex >= 2) )  {
                              // if target to the right, turn towards the right
-            Team4918Drive( -autoDriveSpeed, (limex/30.0) );
-         } else if ( limex < 0 ) {
+            Team4918Drive( -autoDriveSpeed, (limex/15.0) );
+         } else if ( limex <= -2 ) {
                                // if target to the left, turn towards the left
-            Team4918Drive( -autoDriveSpeed, (limex/30.0) );
+            Team4918Drive( -autoDriveSpeed, (limex/15.0) );
          } else {
             Team4918Drive( -autoDriveSpeed, 0.0 );
          }
@@ -1691,7 +1694,7 @@ class Robot : public frc::TimedRobot {
            MotorDisplaySpark( "RS:", m_motorRSMaster,
                               m_RSMasterEncoder, RSMotorState );
       } else if ( 3 == iCallCount%1000 )  {   // every 20 seconds
-         IMUOrientationDisplay();
+         //IMUOrientationDisplay();
 
          // max free speed for MiniCims is about 6200
          //cout << "Accel: x/y/z: " << RoborioAccel.GetX() << "/";
@@ -1716,7 +1719,7 @@ class Robot : public frc::TimedRobot {
                                        // and a cargo ball is visible
       if ( ( BUTTON_TARGET ) && ( !BUTTON_REVERSE ) &&
            ( cargoOnVideo.SeenByCamera ) ) { 
-
+         searchMode = false;
          DriveToCargo();     // then autonomously drive towards the cargo ball
 
                                        // If driver is pressing button one
@@ -1727,14 +1730,16 @@ class Robot : public frc::TimedRobot {
       } else if ( BUTTON_TARGET && BUTTON_REVERSE &&
                   ( 1  == limev )                ) {
                                  // then autonomously drive towards the target
+         searchMode = true;
          DriveToLimelightTarget();
 
                // If the console button 12 (the leftmost missile switch) is on
-      } else if ( BUTTON_CARTESIANDRIVE ) {
+      } else if ( false ) { //formerly BUTTON_CARTESIANDRIVE
                        // Then drive by cartesian coordinates (field oriented)
          DriveCartesianByJoystick();
 
       } else {  // else no buttons pressed
+      searchMode = false;
                              /* Drive the robot according to the            */
          DriveByJoystick();  /* commanded Y and X joystick position.        */
                              /* This function is only called in             */
@@ -2034,8 +2039,8 @@ class Robot : public frc::TimedRobot {
            //02/04/2022 max speed 3600
       if (   ( 0.5 < sCurrState.conY ) &&           // if console "joystick" is
             !( 0.5 < sPrevState.conY ) ) {          // newly-pressed downward
-         TSMotorState.targetVelocity_UnitsPer100ms =  2700 * 4096 / 600;
-         BSMotorState.targetVelocity_UnitsPer100ms =  2500 * 4096 / 600;
+         TSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
          m_motorTopShooter.Set( ControlMode::Velocity, 
                                 TSMotorState.targetVelocity_UnitsPer100ms );
          m_motorBotShooter.Set( ControlMode::Velocity, 
@@ -2069,8 +2074,8 @@ class Robot : public frc::TimedRobot {
                when console "joystick" is pushed in the positive direction ***/
       else if ( ( sCurrState.conX > 0.5 ) &&  //newly pressed rightward
                !( sPrevState.conX > 0.5 ) ) {
-         TSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
-         BSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
+         TSMotorState.targetVelocity_UnitsPer100ms =  2700 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =  2500 * 4096 / 600;
          m_motorTopShooter.Set( ControlMode::Velocity, 
                                 TSMotorState.targetVelocity_UnitsPer100ms );
          m_motorBotShooter.Set( ControlMode::Velocity, 
@@ -2092,7 +2097,8 @@ class Robot : public frc::TimedRobot {
                      // If commanded to shoot based on the limelight data
                      // (this is the same if statement used elsewhere to
                      //  decide if DriveToLimelightTarget() should be called).
-      } else if ( BUTTON_TARGET && BUTTON_REVERSE && ( 1  == limev ) ) {
+      } else if ( BUTTON_TARGET && BUTTON_REVERSE && ( 1  == limev ) 
+                  && (limex <= 2) && (limex >= -2)) { // don't fire unless locked
                    // The goal is 104 inches from the floor,
                    // the limelight is 22 inches from the floor, and
                    // the limelight is angled 27.7 degrees above horizontal;
@@ -2198,9 +2204,9 @@ class Robot : public frc::TimedRobot {
          /*------------------------------------------------------------------*/
    void Shoot( void ) {
       if ( 0.5 < sCurrState.conY ) {             // if Y-stick pulled backward
-         if ( ( 2600 * 4096 / 600 <
+         if ( ( 750 * 4096 / 600 <
                    abs( m_motorTopShooter.GetSelectedSensorVelocity() ) ) &&
-              ( 2400 * 4096 / 600 <
+              ( 750 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
             sCurrState.iConveyPercent = 100;
@@ -2218,9 +2224,9 @@ class Robot : public frc::TimedRobot {
             m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
          }
       } else if ( 0.5 < sCurrState.conX ) {  // If X-stick pushed to the right
-         if ( ( 750 * 4096 / 600 <
+         if ( ( 2600 * 4096 / 600 <
                    abs( m_motorTopShooter.GetSelectedSensorVelocity() ) ) &&
-              ( 750 * 4096 / 600 <
+              ( 2400 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
             sCurrState.iConveyPercent = 100;
@@ -2267,7 +2273,7 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void RunIntake( void ) {
 
-      if ( BUTTON_AUTOCONVEYOR ) {  // If fully-automatic conveyor is selected
+      if ( autoConveyor ) {  // If fully-automatic conveyor is selected
                 // If there is no cargo in intake, then we can run the intake;
                 // or if no cargo at position 5, then we can run the intake.
                 // But if cargo at both places, then we have 2 cargo already
@@ -2307,8 +2313,7 @@ class Robot : public frc::TimedRobot {
          m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
                     // Or if we were previously driving the conveyor backwards
                     // manually, but are not doing that now (we just stopped)
-      } else if ( BUTTON_MANUALCONVEYOR_PREV && BUTTON_CONVEYORBACKWARD_PREV &&
-                  ( !BUTTON_MANUALCONVEYOR || ! BUTTON_CONVEYORBACKWARD ) ) {
+      } else if ( BUTTON_CONVEYORBACKWARD_PREV && !BUTTON_CONVEYORBACKWARD ) {
             sCurrState.iIntakePercent = 0;            // Then stop the intake.
             m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
       } else {
@@ -2364,13 +2369,10 @@ class Robot : public frc::TimedRobot {
                         // run the conveyor as needed (when cargo is in intake)
                         // unless in manual conveyor mode
          static int ConveyorCounter = 0;
-         if ( !BUTTON_MANUALCONVEYOR &&
-               sCurrState.cargoInIntake &&
-              !sCurrState.cargoInPosition5 ) {
+         if ( sCurrState.cargoInIntake && !sCurrState.cargoInPosition5 ) {
            sCurrState.iConveyPercent = 60;
            ConveyorCounter = 6;
-         } else if ( !BUTTON_MANUALCONVEYOR && ( 0 < ConveyorCounter ) &&
-                     !sCurrState.cargoInPosition5 ) {
+         } else if (( 0 < ConveyorCounter ) && !sCurrState.cargoInPosition5 ) {
            sCurrState.iConveyPercent = 60;
            ConveyorCounter--;
          } else {
@@ -2392,10 +2394,10 @@ class Robot : public frc::TimedRobot {
 
 
       /*---------------------------------------------------------------------*/
-      /* RunClimberPole()                                                    */
+      /* RunBlueClimberPole()                                                    */
       /* Extend or retract the telescoping climber pole.                     */
       /*---------------------------------------------------------------------*/
-   void RunClimberPole( rev::CANSparkMax & m_motorClimberPole,
+   void RunBlueClimberPole( rev::CANSparkMax & m_motorClimberPole,
                        rev::SparkMaxLimitSwitch m_ClimberForwardLimitSwitch,
                        rev::SparkMaxLimitSwitch m_ClimberReverseLimitSwitch ) {
       static int iCallCount = 0;
@@ -2404,10 +2406,10 @@ class Robot : public frc::TimedRobot {
 
                      // if BOTH climber buttons pressed, run the climber motor
                      // according to the throttle (Z-Axis) on the joystick
-      if ( BUTTON_CLIMBERUP && BUTTON_CLIMBERDOWN ) {
+      if ( BUTTON_BLUECLIMBERUP && BUTTON_BLUECLIMBERDOWN ) {
          m_motorClimberPole.Set( 0.5*sCurrState.joyZ );
       
-      } else if ( BUTTON_CLIMBERUP ){
+      } else if ( BUTTON_BLUECLIMBERUP ){
          //if ( !BUTTON_CLIMBERUP_PREV ) {       // if button 1 has just been
            // limitSwitchHasBeenHit = false;       // pressed, reset to start
            // m_compressor.Stop();
@@ -2422,21 +2424,21 @@ class Robot : public frc::TimedRobot {
             //   limitSwitchHasBeenHit = true;
             // }
          }
-      } else if (BUTTON_CLIMBERDOWN ) {
+      } else if (BUTTON_BLUECLIMBERDOWN ) {
          m_motorClimberPole.Set( -0.7 );
            
       } else { 
          // Else neither button is currently being pressed.  If either was
          // previously pressed, stop sending power to climber pole motor
-         if ( BUTTON_CLIMBERUP_PREV || BUTTON_CLIMBERDOWN_PREV ) {
+         if ( BUTTON_BLUECLIMBERUP_PREV || BUTTON_BLUECLIMBERDOWN_PREV ) {
             m_motorClimberPole.Set( 0.0 );
          }
       }
       
 
       if ( 0 == iCallCount%103 ) { // every 2 seconds
-         if ( BUTTON_CLIMBERUP || BUTTON_CLIMBERDOWN ) {
-            if ( BUTTON_CLIMBERUP ) {
+         if ( BUTTON_BLUECLIMBERUP || BUTTON_BLUECLIMBERDOWN ) {
+            if ( BUTTON_BLUECLIMBERUP ) {
                cout << "ClimberUp: ";
             } else {
                cout << "ClimberDown: ";
@@ -2450,7 +2452,68 @@ class Robot : public frc::TimedRobot {
             }  
          }
       }
-   }      // RunClimberPole() 
+   }      // RunBlueClimberPole() 
+
+      /*---------------------------------------------------------------------*/
+      /* RunRedClimberPole()                                                    */
+      /* Extend or retract the telescoping climber pole.                     */
+      /*---------------------------------------------------------------------*/
+   void RunRedClimberPole( rev::CANSparkMax & m_motorClimberPole,
+                       rev::SparkMaxLimitSwitch m_ClimberForwardLimitSwitch,
+                       rev::SparkMaxLimitSwitch m_ClimberReverseLimitSwitch ) {
+      static int iCallCount = 0;
+      static bool limitSwitchHasBeenHit = false;
+      iCallCount++;
+
+                     // if BOTH climber buttons pressed, run the climber motor
+                     // according to the throttle (Z-Axis) on the joystick
+      if ( BUTTON_REDCLIMBERUP && BUTTON_REDCLIMBERDOWN ) {
+         m_motorClimberPole.Set( 0.5*sCurrState.joyZ );
+      
+      } else if ( BUTTON_REDCLIMBERUP ){
+         //if ( !BUTTON_CLIMBERUP_PREV ) {       // if button 1 has just been
+           // limitSwitchHasBeenHit = false;       // pressed, reset to start
+           // m_compressor.Stop();
+         //}
+         if ( limitSwitchHasBeenHit ) {
+                 // we are at the top; just supply a little power to stay there
+            m_motorClimberPole.Set( 0.10 );
+         } else {
+                                                   // apply full climbing power
+            m_motorClimberPole.Set( 0.7 );
+            // if ( m_ClimberForwardLimitSwitch.Get() ) {
+            //   limitSwitchHasBeenHit = true;
+            // }
+         }
+      } else if (BUTTON_REDCLIMBERDOWN ) {
+         m_motorClimberPole.Set( -0.7 );
+           
+      } else { 
+         // Else neither button is currently being pressed.  If either was
+         // previously pressed, stop sending power to climber pole motor
+         if ( BUTTON_REDCLIMBERUP_PREV || BUTTON_REDCLIMBERDOWN_PREV ) {
+            m_motorClimberPole.Set( 0.0 );
+         }
+      }
+      
+
+      if ( 0 == iCallCount%103 ) { // every 2 seconds
+         if ( BUTTON_REDCLIMBERUP || BUTTON_REDCLIMBERDOWN ) {
+            if ( BUTTON_REDCLIMBERUP ) {
+               cout << "ClimberUp: ";
+            } else {
+               cout << "ClimberDown: ";
+            }
+            cout << setw(5) <<
+               m_motorClimberPole.GetOutputCurrent() << "A" << endl;
+            if ( m_ClimberForwardLimitSwitch.Get() ) {
+               cout << "Climber pole at top." << endl;
+            } else if ( m_ClimberReverseLimitSwitch.Get() ) {
+               cout << "Climber pole at bottom." << endl;
+            }  
+         }
+      }
+   }      // RunRedClimberPole() 
 
 
       /*---------------------------------------------------------------------*/
@@ -2694,18 +2757,18 @@ class Robot : public frc::TimedRobot {
       // static int icmdSeqManeuverCallCount = 0;
       static int iShootCount = 200;
 
-                   // print debugging info (this code should be removed later)
-      if ( ( mSeqPrev.index != mSeq.index ) ||
-           ( mSeqPrev.type  != mSeq.type  )    ) {
-            cout << "executeManeuver: Changed Maneuver, index: ";
-            cout << mSeqPrev.index << " > " << mSeq.index << " ." << endl;
-            cout << "                                    type: ";
-            cout << mSeqPrev.type  << " > " << mSeq.type  << " ." << endl;
-            cout << "                                distance: ";
-            cout << mSeqPrev.distance << " > " << mSeq.distance << " ." << endl;
-            cout << "                                     yaw: ";
-            cout << mSeqPrev.yaw   << " > " << mSeq.yaw << " ." << endl;
-      }
+      //              // print debugging info (this code should be removed later)
+      // if ( ( mSeqPrev.index != mSeq.index ) ||
+      //      ( mSeqPrev.type  != mSeq.type  )    ) {
+      //       cout << "executeManeuver: Changed Maneuver, index: ";
+      //       cout << mSeqPrev.index << " > " << mSeq.index << " ." << endl;
+      //       cout << "                                    type: ";
+      //       cout << mSeqPrev.type  << " > " << mSeq.type  << " ." << endl;
+      //       cout << "                                distance: ";
+      //       cout << mSeqPrev.distance << " > " << mSeq.distance << " ." << endl;
+      //       cout << "                                     yaw: ";
+      //       cout << mSeqPrev.yaw   << " > " << mSeq.yaw << " ." << endl;
+      // }
 
       switch ( mSeq.type )
       {
@@ -3278,15 +3341,10 @@ class Robot : public frc::TimedRobot {
                                                   // fully-saturated pure blue
                   m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 0, 255);
                }
-            } else {
-                             // advancing orange LEDS, separated by unlit LEDs
-               // if ( iBufNum == iLEDNum % kNumLEDBufs ) {
-               //    m_ledBufferArr[iBufNum][iLEDNum].SetHSV( 20, 255, 32 );
-               // } else {
-               //    m_ledBufferArr[iBufNum][iLEDNum].SetHSV( 0, 0, 0 );
-               //               //    (iLEDNum*180)/kLEDStripLength, 255, 16 );
-               // }
-               m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 125, 255, 0 );
+            } else if ( ( 71 < iLEDNum ) && ( iLEDNum < 77 ) ) {
+               m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 255, 0);
+            } else if ( ( 21 < iLEDNum ) && ( iLEDNum < 27 ) ) {
+               m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 255, 0);
             }
          }
       }
@@ -3349,36 +3407,28 @@ class Robot : public frc::TimedRobot {
    void AutonomousInit() override {
       RobotInit();
       m_compressor.EnableDigital();
-//      limenttable->PutNumber( "ledMode", 3 );                   // turn LEDs on
-      cout << "shoot 3 balls" << endl;
-      // m_drive.StopMotor();
       iCallCount=0;
       m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kReverse);
       GetAllVariables();
       sCurrState.teleop = false;
       sCurrState.initialYaw = sCurrState.yawPitchRoll[0]; 
-  //  m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-  //  m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-  //  m_motorLSMaster.SetIntegralAccumulator( 0.0 );
-  //  m_motorRSMaster.SetIntegralAccumulator( 0.0 );
-//    m_motorLSMaster.ConfigClosedloopRamp(0.1);
-//    m_motorRSMaster.ConfigClosedloopRamp(0.1);
-  //  m_motorLSMaster.ConfigOpenloopRamp(  0.1);
-  //  m_motorRSMaster.ConfigOpenloopRamp(  0.1);
       LSMotorState.targetVelocityRPM = 0.0;
       RSMotorState.targetVelocityRPM = 0.0;
       Team4918Drive( 0.0, 0.0 );          // make sure drive motors are stopped
 
                              // mSeqIndex can be set to different values,
                              // based on the console switches.
-      if ( !BUTTON_CARTESIANDRIVE ) {   // if field-oriented switch is not on
-         mSeqIndex =  0;        // A) ballgrabber sequence (untested)
+      if ( BUTTON_SWITCH1 ) {
+         mSeqIndex =  20;        // simple drive auto (no shooting)
+      } else if ( BUTTON_SWITCH2 ) {
+         mSeqIndex = 40;        // 2 ball auto
+      } else if ( BUTTON_SWITCH3 ) {
+         mSeqIndex =  0;        // 3 ball auto
+      } else if ( BUTTON_SWITCH4 ) {
+         mSeqIndex =  70;       // no auto (do nothing)
       } else {
-         mSeqIndex = 20;        // B) ballgrabber sequence (untested)
+         mSeqIndex =  70;       // no switch flipped, do nothing
       }
-      // mSeqIndex =  60;       // barrel sequence (works)
-      // mSeqIndex =  80;       // slalom sequence (works)
-      // mSeqIndex = 100;       // bounce sequence (works)
 
                              // Initialize yaw and distance, so next maneuvers
                              // are relative to these current settings.
@@ -3413,7 +3463,7 @@ class Robot : public frc::TimedRobot {
       iCallCount++;
 
 
-      BUTTON_AUTOCONVEYOR = true;    // Select fully-auto intake/conveyor mode
+      autoConveyor = true;    // Select fully-auto intake/conveyor mode
       RunIntake();
       RunConveyor();
 
@@ -3430,16 +3480,6 @@ class Robot : public frc::TimedRobot {
       motorFindMinMaxVelocitySpark( m_LSMasterEncoder, LSMotorState );
       motorFindMinMaxVelocitySpark( m_RSMasterEncoder, RSMotorState );
 
-      if ( 10 == iCallCount%500 ) {                        // every 10 seconds
-         MotorDisplaySpark( "LS:", m_motorLSMaster, 
-                            m_LSMasterEncoder, LSMotorState );
-      } else if ( 11 == iCallCount%500 ) {                 // every 10 seconds
-         MotorDisplaySpark( "RS:", m_motorRSMaster, 
-                            m_RSMasterEncoder, RSMotorState );
-      } else if ( 12 == iCallCount%500 ) {                 // every 10 seconds
-         IMUOrientationDisplay();
-      }
-
       return; 
 
    }      // AutonomousPeriodic()
@@ -3451,6 +3491,7 @@ class Robot : public frc::TimedRobot {
       /*---------------------------------------------------------------------*/
    void TeleopInit() override {
       RobotInit();
+      autoConveyor = false;
       m_compressor.EnableDigital();
                                                     // zero the drive encoders
   //  m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
@@ -3488,9 +3529,7 @@ class Robot : public frc::TimedRobot {
       // cout << "yawrate: " << sCurrState.rateXYZ[2] << endl;
       //m_motorIntake.Set(ControlMode::PercentOutput,  0.4);
 
-      if ( BUTTON_AUTOCONVEYOR ) {  // If fully-automatic conveyor is selected
-
-      } else if ( BUTTON_RUNINTAKE )   {                 // Run intake forward.
+      if ( BUTTON_RUNINTAKE )   {                 // Run intake forward.
          if (  sCurrState.cargoInIntake ) {       // if a cargo ball in intake
             m_motorIntake.Set( ControlMode::PercentOutput, 0.6 ); // be gentle
          } else {
@@ -3509,17 +3548,14 @@ class Robot : public frc::TimedRobot {
          m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
                     // Or if we were previously driving the conveyor backwards
                     // manually, but are not doing that now (we just stopped)
-      } else if ( BUTTON_MANUALCONVEYOR_PREV && BUTTON_CONVEYORBACKWARD_PREV &&
-                  ( !BUTTON_MANUALCONVEYOR || ! BUTTON_CONVEYORBACKWARD ) ) {
+      } else if ( BUTTON_CONVEYORBACKWARD_PREV && ( !BUTTON_CONVEYORBACKWARD ) ) {
             sCurrState.iIntakePercent = 0;            // Then stop the intake.
             m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
-      } else  if ( !BUTTON_EXTENDCOLORWHEEL_PREV && BUTTON_EXTENDCOLORWHEEL ) {   //to mess with
+      } else  if ( !BUTTON_UPPYDOWNEY_PREV && BUTTON_UPPYDOWNEY ) {   //to mess with
          if ( bFlipperState ){
             m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kForward);
-            cout << "FIRST HALF";
          } else {
             m_flipperSolenoid.Set( frc::DoubleSolenoid::Value::kReverse);
-            cout << "SECOND";
          }
          bFlipperState = !bFlipperState; 
       }
@@ -3533,9 +3569,9 @@ class Robot : public frc::TimedRobot {
       RunIntake();
       RunConveyor();
 
-      RunClimberPole( m_motorLSClimber, m_LSClimberForwardLimitSwitch,
+      RunBlueClimberPole( m_motorLSClimber, m_LSClimberForwardLimitSwitch,
                                         m_LSClimberReverseLimitSwitch );
-      RunClimberPole( m_motorRSClimber, m_RSClimberForwardLimitSwitch,
+      RunRedClimberPole( m_motorRSClimber, m_RSClimberForwardLimitSwitch,
                                         m_RSClimberReverseLimitSwitch );
       SwitchCameraIfNecessary();
 
@@ -3544,9 +3580,6 @@ class Robot : public frc::TimedRobot {
          // cout << frc::GetTime() - dTimeOfLastCall << endl;
                // use frc:Timer::GetFPGATimestamp() instead?
          // LEDInit();   // initialize LED sequences
-      }
-      if ( BUTTON_MANUALCONVEYOR ) {
-         LEDBlank();   // Blank all LED sequences (for testing only!)
       }
       // LEDAllianceColor();         // light the entire LED strip blue or red
       // LEDTest();       // Alliance color at intake, rainbow everywhere else
