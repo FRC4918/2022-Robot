@@ -59,6 +59,7 @@
 // #include "rev/ColorSensorV3.h"
 #include <unistd.h>
 #include <sstream>
+#include <wpi/PortForwarder.h>
 
 using std::cout;
 using std::endl;
@@ -151,7 +152,7 @@ class Robot : public frc::TimedRobot {
    };
 
    int mSeqIndex = 0;
-   
+
    bool autoConveyor;
    bool searchMode = false;
                // Create a sequence of full maneuvers
@@ -214,8 +215,8 @@ class Robot : public frc::TimedRobot {
       {  39,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
       // index 40: 2 ball autonomous, no vision needed
-      {  40,  M_DRIVE_STRAIGHT,     2.3,       0.0,         false },
-      {  41,  M_DRIVE_STRAIGHT,     1.0,       0.0,         false }, // was true, removed to isolate from vision bugs
+      {  40,  M_DRIVE_STRAIGHT,     0.0,       0.0,         false },
+      {  41,  M_DRIVE_STRAIGHT,     3.3,       0.0,         false }, // was true, removed to isolate from vision bugs
       {  42,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
       {  43,  M_SHOOT,              0.0,       0.0,         false }, // shoots with whatever is on conX (Medium)
       {  44,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
@@ -1503,7 +1504,6 @@ class Robot : public frc::TimedRobot {
       //       Bind Target? Yes
       // ---------------------------------------------------------------------
    bool DriveToLimelightTarget()  {
-
       bool returnVal = true;
       static int  iCallCount = 0;
 
@@ -1542,10 +1542,10 @@ class Robot : public frc::TimedRobot {
             Team4918Drive( -autoDriveSpeed, 0.0 );
          } else if ( (limex >= 2) )  {
                              // if target to the right, turn towards the right
-            Team4918Drive( -autoDriveSpeed, (limex/15.0) );
+            Team4918Drive( -autoDriveSpeed, (limex/30.0) );
          } else if ( limex <= -2 ) {
                                // if target to the left, turn towards the left
-            Team4918Drive( -autoDriveSpeed, (limex/15.0) );
+            Team4918Drive( -autoDriveSpeed, (limex/30.0) );
          } else {
             Team4918Drive( -autoDriveSpeed, 0.0 );
          }
@@ -2039,8 +2039,8 @@ class Robot : public frc::TimedRobot {
            //02/04/2022 max speed 3600
       if (   ( 0.5 < sCurrState.conY ) &&           // if console "joystick" is
             !( 0.5 < sPrevState.conY ) ) {          // newly-pressed downward
-         TSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
-         BSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
+         TSMotorState.targetVelocity_UnitsPer100ms =  900 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =  900 * 4096 / 600;
          m_motorTopShooter.Set( ControlMode::Velocity, 
                                 TSMotorState.targetVelocity_UnitsPer100ms );
          m_motorBotShooter.Set( ControlMode::Velocity, 
@@ -2054,6 +2054,22 @@ class Robot : public frc::TimedRobot {
          m_motorBotShooter.Set(ControlMode::Velocity,
                0.95 * (double)m_motorBotShooter.GetSelectedSensorVelocity() );
          
+      } else if (( sCurrState.conX < -0.5 ) &&  //newly pressed leftward
+               !( sPrevState.conX < -0.5 )) {
+         TSMotorState.targetVelocity_UnitsPer100ms =  2800 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =  2700 * 4096 / 600;
+         m_motorTopShooter.Set( ControlMode::Velocity, 
+                                TSMotorState.targetVelocity_UnitsPer100ms );
+         m_motorBotShooter.Set( ControlMode::Velocity, 
+                                BSMotorState.targetVelocity_UnitsPer100ms );
+      } else if (!( sCurrState.conX < -0.5 ) &&  //newly released leftward
+               ( sPrevState.conX < -0.5 ) ) {
+         TSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
+         m_motorTopShooter.Set( ControlMode::Velocity,
+               0.95 * (double)m_motorTopShooter.GetSelectedSensorVelocity() );
+         m_motorBotShooter.Set(ControlMode::Velocity,
+               0.95 * (double)m_motorBotShooter.GetSelectedSensorVelocity() );
       } else if (  ( sCurrState.conY < -0.5 ) &&  // else if console "joystick"
                   !( sPrevState.conY < -0.5 ) ) { // is newly-pressed upward
          TSMotorState.targetVelocity_UnitsPer100ms =  3100 * 4096 / 600;
@@ -2074,14 +2090,14 @@ class Robot : public frc::TimedRobot {
                when console "joystick" is pushed in the positive direction ***/
       else if ( ( sCurrState.conX > 0.5 ) &&  //newly pressed rightward
                !( sPrevState.conX > 0.5 ) ) {
-         TSMotorState.targetVelocity_UnitsPer100ms =  2700 * 4096 / 600;
-         BSMotorState.targetVelocity_UnitsPer100ms =  2500 * 4096 / 600;
+         TSMotorState.targetVelocity_UnitsPer100ms =  2350 * 4096 / 600;
+         BSMotorState.targetVelocity_UnitsPer100ms =  2150 * 4096 / 600;
          m_motorTopShooter.Set( ControlMode::Velocity, 
                                 TSMotorState.targetVelocity_UnitsPer100ms );
          m_motorBotShooter.Set( ControlMode::Velocity, 
                                 BSMotorState.targetVelocity_UnitsPer100ms );
-      } else if ( !( sCurrState.conX < 0.5 ) && //newly released rightward
-                   ( sPrevState.conX < 0.5 ) ) {
+      } else if ( !( sCurrState.conX > 0.5 ) && //newly released rightward
+                   ( sPrevState.conX > 0.5 ) ) {
          TSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
          m_motorTopShooter.Set( ControlMode::Velocity,
@@ -2171,9 +2187,8 @@ class Robot : public frc::TimedRobot {
               (sCurrState.dLimelightDesiredShooterSpeed +  50.0) * 4096 / 600;
          m_motorTopShooter.Set( ControlMode::Velocity,
                                 TSMotorState.targetVelocity_UnitsPer100ms );
-         m_motorBotShooter.Set( ControlMode::Velocity,
+         m_motorBotShooter.Set( ControlMode::Velocity, 
                                 BSMotorState.targetVelocity_UnitsPer100ms );
-
       } else if ( ( -0.5 < sCurrState.conY       ) && 
                   (        sCurrState.conY < 0.5 ) ) {
                                    // else spin the shooter motors down slowly
@@ -2181,7 +2196,7 @@ class Robot : public frc::TimedRobot {
             0.95 * (double)m_motorTopShooter.GetSelectedSensorVelocity() );
          m_motorBotShooter.Set(ControlMode::Velocity,
             0.95 * (double)m_motorBotShooter.GetSelectedSensorVelocity() );
-      } 
+      }
 
       if ( 0 == iCallCount%100 )  {   // every 2 seconds (at 2.00)
          if ( 100.0 < abs(m_motorTopShooter.GetSelectedSensorVelocity()) ) {
@@ -2204,9 +2219,9 @@ class Robot : public frc::TimedRobot {
          /*------------------------------------------------------------------*/
    void Shoot( void ) {
       if ( 0.5 < sCurrState.conY ) {             // if Y-stick pulled backward
-         if ( ( 750 * 4096 / 600 <
+         if ( ( 850 * 4096 / 600 <
                    abs( m_motorTopShooter.GetSelectedSensorVelocity() ) ) &&
-              ( 750 * 4096 / 600 <
+              ( 850 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
             sCurrState.iConveyPercent = 100;
@@ -2224,18 +2239,28 @@ class Robot : public frc::TimedRobot {
             m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
          }
       } else if ( 0.5 < sCurrState.conX ) {  // If X-stick pushed to the right
-         if ( ( 2600 * 4096 / 600 <
+         if ( ( 2250 * 4096 / 600 <
                    abs( m_motorTopShooter.GetSelectedSensorVelocity() ) ) &&
-              ( 2400 * 4096 / 600 <
+              ( 2050 * 4096 / 600 <
                    abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
                                          // run the conveyor to shoot the balls
             sCurrState.iConveyPercent = 100;
             m_motorConveyMaster.Set( ControlMode::PercentOutput, 1.0 );
             m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
          }
+      } else if (-0.5 > sCurrState.conX) { //PANIC CODE
+            if ( ( 2600 * 4096 / 600 <
+                   abs( m_motorTopShooter.GetSelectedSensorVelocity() ) ) &&
+              ( 2500 * 4096 / 600 <
+                   abs( m_motorBotShooter.GetSelectedSensorVelocity() ) )   ) {
+                                         // run the conveyor to shoot the balls
+            sCurrState.iConveyPercent = 100;
+            m_motorConveyMaster.Set( ControlMode::PercentOutput, 1.0 );
+            m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
       } else if ( ( 0.5 < sPrevState.conY  ) ||    // else if X- or Y-stick WAS
                   ( sPrevState.conY < -0.5 ) ||    // pushed in any "shoot"
-                  ( 0.5 < sPrevState.conX  )   ) { // direction, and now is not
+                  ( 0.5 < sPrevState.conX  ) ||
+                  ( sPrevState.conX < -0.5 )  ) { // direction, and now is not
                                            // Then turn off conveyor and intake
          sPrevState.iConveyPercent = 0;
          sCurrState.iConveyPercent = 0;
@@ -2245,7 +2270,13 @@ class Robot : public frc::TimedRobot {
                      // If commanded to shoot based on the limelight data
                      // (this is the same if statement used elsewhere to
                      //  decide if DriveToLimelightTarget() should be called).
-      } else if ( BUTTON_TARGET && BUTTON_REVERSE && ( 1 == limev ) ) {
+      }
+      }
+      
+      
+      
+      
+      /*else if ( BUTTON_TARGET && BUTTON_REVERSE && ( 1 == limev ) ) {
          if ( ( sCurrState.dLimelightDesiredShooterSpeed * 4096 / 600 <
                    abs( m_motorTopShooter.GetSelectedSensorVelocity() ) ) &&
               ( (sCurrState.dLimelightDesiredShooterSpeed-50.0) * 4096 / 600 <
@@ -2264,6 +2295,7 @@ class Robot : public frc::TimedRobot {
          m_motorConveyMaster.Set( ControlMode::PercentOutput, 0.0 );
          m_motorIntake.Set( ControlMode::PercentOutput, 0.0 );
       }
+      }*/
    }    // Shoot()
 
 
@@ -2979,6 +3011,10 @@ class Robot : public frc::TimedRobot {
    void RobotInit() {
       static int iRobotInitCallCount = 0;
 
+      wpi::PortForwarder::GetInstance().Add(5800, "limelight.local", 5800);
+      wpi::PortForwarder::GetInstance().Add(5801, "limelight.local", 5801);
+      wpi::PortForwarder::GetInstance().Add(5805, "limelight.local", 5805);
+
       // see /home/team4918/wpilib/2022/utility/resources/app/resources/cpp/
       //      src/examples/DigitalCommunication/cpp/Robot.cpp
       // and /home/team4918/.gradle/caches/transforms-3/
@@ -3454,8 +3490,8 @@ class Robot : public frc::TimedRobot {
                 //    so 1.0 is minimal throttle, -1.0 is maximum)
       // sCurrState.joyZ =  1.0;   // minimum speed (about .1 * full throttle)
       // sCurrState.joyZ =  0.5;   // one-quarter speed
-      // sCurrState.joyZ =  0.0;   // half speed
-      // sCurrState.joyZ = -0.5;   // three-quarter speed
+      //sCurrState.joyZ =  0.0;   // half speed
+      sCurrState.joyZ = -0.5;   // three-quarter speed
       // sCurrState.joyZ = -1.0;   // full speed
 // Comment this line out to test with actual throttle paddle
 //    sCurrState.joyZ = 0.5;   // one-quarter speed
