@@ -1226,10 +1226,10 @@ class Robot : public frc::TimedRobot {
       dThrottle = std::min( 1.0,  dThrottle );
       desiredForward = desiredForward * dThrottle;
       desiredTurn    = desiredTurn    * dThrottle;
-      if ( 19 == iCallCount%200 ) {
+      // if ( 19 == iCallCount%200 ) {
          // cout << "Throttle/forward/turn " << dThrottle << "/"
          //      << desiredForward << "/" << desiredTurn << endl;
-      }
+      // }
 #ifdef SAFETY_LIMITS
                            // for safety: allow limited range only -0.5 to 0.5
       desiredForward = std::min(  0.5, desiredForward );
@@ -1267,10 +1267,23 @@ class Robot : public frc::TimedRobot {
            //    rev::CANSparkMax::ControlType::kCurrent
            //        (and kSmartMotion and kSmartVelocity)
            // Note that the setpoint is specified in RPM, not encoder ticks.
+      // This seems to chatter the motors:
       m_LSMasterPID.SetReference( LSMasterOutput * DriveMaxRPM,
                                   rev::CANSparkMax::ControlType::kVelocity );
       m_RSMasterPID.SetReference( RSMasterOutput * DriveMaxRPM,
                                   rev::CANSparkMax::ControlType::kVelocity );
+      // These other drive methods all still chattered the drive motors.
+      // m_LSMasterPID.SetReference( LSMasterOutput * 12.0,
+      //                             rev::CANSparkMax::ControlType::kVoltage );
+      // m_RSMasterPID.SetReference( RSMasterOutput * 12.0,
+      //                             rev::CANSparkMax::ControlType::kVoltage );
+      // This was maybe a little better (?)
+      // m_motorLSMaster.Set( LSMasterOutput );
+      // m_motorRSMaster.Set( RSMasterOutput );
+      // m_LSMasterPID.SetReference( LSMasterOutput * 30.0,
+      //                             rev::CANSparkMax::ControlType::kCurrent );
+      // m_RSMasterPID.SetReference( RSMasterOutput * 30.0,
+      //                             rev::CANSparkMax::ControlType::kCurrent );
       LSMotorState.targetVelocityRPM = LSMasterOutput * DriveMaxRPM; 
       RSMotorState.targetVelocityRPM = RSMasterOutput * DriveMaxRPM;
 #ifdef DISP_SMARTDASHBOARD
@@ -1418,17 +1431,31 @@ class Robot : public frc::TimedRobot {
       // It returns true if the limelight data is valid, false otherwise.
       // Maggie and Jeff found these limelight values work pretty well
       // for the 2022 goal retro-reflective tape shapes:
+      // Then Maggie and Max made some changes during the Auburn competition,
+      // and those values are in the second column, where they differ from
+      // the original values.  The third column has settings we went back to
+      // in the Robot lab (again, just the values that are different from
+      // the 1st or 2nd column).  We noticed that the Exposure was set to 95
+      // at Auburn, which we thought may have been a mistake (it's easy to
+      // bump the values accidentally), and that was why the robot was
+      // continually hunting in yaw when trying to lock using the limelight,
+      // both at Auburn and in our lab, until we changed it back to 5 and
+      // it behaved well again.
+      // The third column is our best guess right now, but we will check all
+      // values and maybe tweak them at the Bonney Lake competition.
+      //                           Orig       Auburn      31mar2022
+      //                           values     values (where different)
       //    Pipeline type: Limelight standard
       //       Source Image: Camera
       //       Resolutions 320x240 90fps
       //       LEDs: On
       //       Orientation: Normal
-      //       Exposure: 2
-      //       Black Level Offset: 24
+      //       Exposure: 2                      95           5
+      //       Black Level Offset: 24                       15
       //       Red Balance: 1428
       //       Blue Balance: 1428
       //       Thresholding page:
-      //       Hue: 40-87
+      //       Hue: 40-87                                   55-93
       //       Saturation: 99-255
       //       Value: 106-255
       //       Erosion Steps: 0
@@ -1443,12 +1470,18 @@ class Robot : public frc::TimedRobot {
       //       Width to Height Ratio (yellow rectangle): .5652 - 4.0302
       //       Direction Filter: None
       //       Smart Speckle Rejection: 0
-      //       Target Grouping: dual-target
+      //       Target Grouping: dual-target      Smart target group:
       //       Dual-target filters:
       //       Intersection Filter: None
+      //                                Smart-target filters:
+      //                                  group size: 1-7                1-5
+      //                                  group outlier rejector: none
+      //                                  horiz. outlier filter: 1.5
+      //                                  vert.  outlier filter: 1.5
       //    Output page:
       //       Targeting Region: Center
       //       Send Raw Corners? No
+      //       Send Raw Contours? No
       //       Crosshair Mode: Single Crosshair
       //       Crosshair A:
       //          (all settings: X, Y: 0.00
@@ -1501,12 +1534,12 @@ class Robot : public frc::TimedRobot {
 
                  // Calculate the Yaw Position we'd arrive at (when we came to
                  // a stop) if we simply decelerated our turn rate at
-                 // 700.0 degrees/sec/sec, starting right now.
+                 // 600.0 degrees/sec/sec, starting right now.
                  // This is conservative; I have measured EZ-PZ angular
                  // acceleration rate at about 2500 deg/sec/sec
                  // (max yaw rate is about 500 deg/sec).
          dEventualYawPosition = sCurrState.yawPosnEstimate +
-                                ( 0.5 / 700.0 ) *
+                                ( 0.5 / 600.0 ) *
                                           sCurrState.yawRateEstimate *
                                           abs(sCurrState.yawRateEstimate);
                  // yawPosnEstimate is left-turn-positive, but
@@ -1565,6 +1598,10 @@ class Robot : public frc::TimedRobot {
       bool returnVal = true;
       static int  iCallCount = 0;
 
+      static double dDesiredYaw;   // degrees absolute yaw, positive to left
+      static double dDesiredTurn;  // -1.0 to +1.0, positive is to the right
+      static double dEventualYawPosition = 0;   // degrees, positive to left
+
       iCallCount++;
 //    if (  sCurrState.cargoInIntake ) {          // if cargo ball in intake
 //       m_motorIntake.Set( ControlMode::PercentOutput,  0.6 ); // be gentle
@@ -1589,39 +1626,34 @@ class Robot : public frc::TimedRobot {
              // In the code below, we use those cargoOnVideo values to
              // determine how fast and in which direction to drive, to go
              // towards the cargo ball.
-             // We should change the if/else statements below to calculate
-             // autoDriveSpeed by using a math expression based on
-             // cargoOnVideo.Y values.
              // jag; 22mar2021: all these values have been changed; it may be
              // useful to compare with the original working code in
              // ~/Desktop/2020-Robot/Robot.cpp
-#ifdef JAG_SAFEMODE
-         if        ( cargoOnVideo.Y < -50 ) {  // if we're super close
-            autoDriveSpeed = -0.35;   //   go backward slowly
-         } else if ( cargoOnVideo.Y < -30 ) {  // if we're super close
-            autoDriveSpeed = -0.25;   //   go backward slowly
-            autoDriveSpeed = -0.35 * float( - 30 - cargoOnVideo.Y ) / 20.0;
-         } else if ( cargoOnVideo.Y < 0 )   { // if we're really close...
-            autoDriveSpeed = 0.0;     //   stop (or 0.08 to go slow)
-         } else if ( cargoOnVideo.Y <  20 ) {  // if we're a little farther
-#else
-         if ( cargoOnVideo.Y < 0 )   { // if we're really close...
-#endif
-            autoDriveSpeed = 0.35;    //   go a little faster
-            // autoDriveSpeed = 0.20 * float( cargoOnVideo.Y ) / 20.0;
-         } else if (  cargoOnVideo.Y < 40 ) {  // if we're farther still...
-            autoDriveSpeed = 0.40;    //   go a little faster still
-            // autoDriveSpeed = 0.20 + 0.20 * float( cargoOnVideo.Y - 20 ) / 40.0;
-         } else {                     // else we must be really far...
-            autoDriveSpeed = 0.45;    //   go as fast as we dare
-         }
+             // Latest change: now we let the driver maintain joystick control
+             // of the forward/backward speeds; all we do is control the turn.
+         autoDriveSpeed = sCurrState.joyY;
 
-                          // LATER: May want to modify autoDriveSpeed depending
-                          // on the distance from the target determined
-                          // by sonar transducers.
+                         // LATER: May want to modify autoDriveSpeed depending
+                         // on the distance from the target or a wall (or
+                         // other obstruction) determined by sonar transducers.
 
-         // May have to add/subtract a constant from x-values here, to account
-         // for the offset of the camera away from the centerline of the robot.
+                     // See the dDesiredTurn calculations in DriveToDistance()
+                     // for an explanation of the following code.
+         cargoOnVideo.X = std::max( -160, cargoOnVideo.X );
+         cargoOnVideo.X = std::min(  160, cargoOnVideo.X );
+         cargoOnVideo.Y = std::max( -120, cargoOnVideo.Y );
+         cargoOnVideo.Y = std::min(  120, cargoOnVideo.Y );
+         dDesiredYaw = sCurrState.yawPosnEstimate -
+                180.0 * 3.14156 * cargoOnVideo.X / ( 300.0 + cargoOnVideo.Y );
+         dEventualYawPosition = sCurrState.yawPosnEstimate + ( 0.5 / 600.0 ) *
+                                              sCurrState.yawRateEstimate *
+                                              abs(sCurrState.yawRateEstimate);
+         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/50.0;
+         dDesiredTurn = std::max( -1.0, dDesiredTurn );
+         dDesiredTurn = std::min(  1.0, dDesiredTurn );
+
+#ifdef JAG_OLD_WAY
+            // Delete this code once the new way is verified to work correctly.
          if        ( 50 <= cargoOnVideo.X ) {
                              // if target to the right, turn towards the right
             Team4918Drive( autoDriveSpeed/1.5,
@@ -1635,6 +1667,9 @@ class Robot : public frc::TimedRobot {
          } else {
             Team4918Drive( autoDriveSpeed/1.5, 0.0 ); // drive straight forward
          }
+#else
+         Team4918Drive( autoDriveSpeed, dDesiredTurn );
+#endif
 
       } else {               // else USB videocamera data is not valid any more
          if ( !sCurrState.teleop ) {  // If not in teleop mode
@@ -1770,11 +1805,11 @@ class Robot : public frc::TimedRobot {
       }
                  // Calculate the Yaw Position we'd arrive at (when we came to
                  // a stop) if we simply decelerated our turn rate at
-                 // 700.0 degrees/sec/sec, starting right now.
+                 // 600.0 degrees/sec/sec, starting right now.
                  // This is conservative; I have measured EZ-PZ angular
                  // acceleration rate at about 2500 deg/sec/sec
                  // (max yaw rate is about 500 deg/sec).
-      dEventualYawPosition = currentYaw + ( 0.5 / 700.0 ) *
+      dEventualYawPosition = currentYaw + ( 0.5 / 600.0 ) *
                                           sCurrState.yawRateEstimate *
                                           abs(sCurrState.yawRateEstimate);
              // Since we now account for yaw rate in deciding when to end the
@@ -1916,13 +1951,50 @@ class Robot : public frc::TimedRobot {
                                   ( desiredDistance - dDistanceDriven ) / 10.0;
             }
          }
+                             // if we have been told to divert to cargo balls
+                             // if we see one, and we do see one,
+         if ( bDivertToCargo && cargoOnVideo.SeenByCamera ) {
+                 // then drive toward the cargo ball, by changing desiredYaw
+                 // to point to the cargo ball, based on the X,Y coordinates
+                 // of the cargo ball in the camera view.
+                 // cargoOnVideo.Y is the Y-position in the video frame of
+                 // the cargo ball; the range is from -120 to +120 (pixels).
+                 // cargoOnVideo.X is the X-position in the video frame of
+                 // the cargo ball; the range is from -160 to +160 (pixels).
+                 // (0,0) is right in the center of the field of view, with
+                 // X increasing to the right, and Y increasing up away from
+                 // the robot.
+                 // For this calculation, we find the angle between the center
+                 // of the robot and the cargo ball, which is very
+                 // approximately the same as the ratio between the X value
+                 // in pixels and Y+300 pixels (in radians, assuming the
+                 // center (turn-axis) of the robot is at a y-value of -300),
+                 // multiplied by 180.0/pi to convert to degrees.
+                 // (We do that rather than call atan2() because it is
+                 //  accurate enough, and much faster than atan2() ).
+                 // That angle is then added to the current yaw angle to get
+                 // the desiredYaw angle.
+                 // Since yawPosnEstimate is positive to the left but
+                 // X is positive to the right, we have to subtract
+                 // the ball offset angle from yawPosnEstimate.
+                 // NOTE: May have to add/subtract a constant from x-values
+                 // here, to account for the offset of the camera away from
+                 // the centerline of the robot.
+            cargoOnVideo.X = std::max( -160, cargoOnVideo.X );
+            cargoOnVideo.X = std::min(  160, cargoOnVideo.X );
+            cargoOnVideo.Y = std::max( -120, cargoOnVideo.Y );
+            cargoOnVideo.Y = std::min(  120, cargoOnVideo.Y );
+            desiredYaw = sCurrState.yawPosnEstimate -
+                180.0 * 3.14156 * cargoOnVideo.X / ( 300.0 + cargoOnVideo.Y );
+         }
+
                  // Calculate the Yaw Position we'd arrive at (when we came to
                  // a stop) if we simply decelerated our turn rate at
-                 // 700.0 degrees/sec/sec, starting right now.
+                 // 600.0 degrees/sec/sec, starting right now.
                  // This is conservative; I have measured EZ-PZ angular
                  // acceleration rate at about 2500 deg/sec/sec.
                  // (max yaw rate is about 500 deg/sec).
-         dEventualYawPosition = sCurrState.yawPosnEstimate + ( 0.5 / 700.0 ) *
+         dEventualYawPosition = sCurrState.yawPosnEstimate + ( 0.5 / 600.0 ) *
                                               sCurrState.yawRateEstimate *
                                               abs(sCurrState.yawRateEstimate);
              // Since we now account for yaw rate in deciding when to end the
@@ -1931,47 +2003,6 @@ class Robot : public frc::TimedRobot {
          dDesiredTurn = std::max( -1.0, dDesiredTurn );
          dDesiredTurn = std::min(  1.0, dDesiredTurn );
          
-         if ( !bDivertToCargo ) {     // if we are ignoring cargo balls (we've
-                                      // been told NOT to divert to cargo)
-            // then just drive (don't change dDesiredxxx values)
-
-                   // else (we've been told to divert to cargo balls when seen)
-                   // if a cargo ball is seen
-         } else if ( cargoOnVideo.SeenByCamera ) {
-                 // Then drive toward the cargo ball, by setting dDesiredSpeed
-                 // and dDesiredTurn, based on the X,Y coordinates of the
-                 // cargo ball in the camera view.
-                 // cargoOnVideo.Y is the Y-position in the video frame of
-                 // the cargo ball; the range is from -120 to +120 (pixels).
-                 // cargoOnVideo.X is the X-position in the video frame of
-                 // the cargo ball; the range is from -160 to +160 (pixels).
-                 // (0,0) is right in the center of the field of view, with
-                 // X increasing to the right, and Y increasing down towards
-                 // the robot.
-                 // We could use a little math to make the turns a little 
-                 // sharper when the X offset is small, or when the cargo ball
-                 // is very close to the robot (Y is large).
-
-                                    // The speed should be between 0.1 and 0.3
-            dDesiredSpeed = std::min( (120.0 - cargoOnVideo.Y) / 100.0,
-                                      0.3 );
-                                    // The turn should be between -0.5 and 0.5
-            if        ( 5 <= cargoOnVideo.X ) {
-               // dDesiredTurn = sqrt(cargoOnVideo.X/300.0) );
-               dDesiredTurn = std::min( (cargoOnVideo.X/600.0), 1.0 );
-            } else if ( cargoOnVideo.X < -5 ) {
-               // dDesiredTurn = -sqrt(-cargoOnVideo.X/300.0) );
-               dDesiredTurn = std::max( (cargoOnVideo.X/600.0), -1.0 );
-            } else {
-               dDesiredTurn = 0.0;
-            }
-         } else {       // else (we'd divert to a cargo ball if there was one,
-                        // but no cargo ball is currently in view)
-            // then just drive (don't change dDesiredxxx values)
-            dDesiredSpeed = dDesiredSpeed/4;
-            dDesiredTurn  = dDesiredTurn/4;
-         }
-
             // If we've been told to drive to a cargo ball, and we now have one
          if ( bDivertToCargo && sCurrState.cargoInIntake ) {
             dDesiredSpeed = 0.0;                              // stop the robot
@@ -2177,7 +2208,8 @@ class Robot : public frc::TimedRobot {
          BSMotorState.targetVelocity_UnitsPer100ms =
               (sCurrState.dLimelightDesiredShooterSpeed -  50.0) * 4096 / 600;
        if ( 21 == iCallCount%100 ) {                      // Every 2 seconds
-            cout << "Shooters: " << sCurrState.dLimelightDesiredShooterSpeed << endl;
+            cout << "Shooters: " <<
+                    sCurrState.dLimelightDesiredShooterSpeed << endl;
        }
       } else if ( ( -0.5 < sCurrState.conY       ) && 
                   (        sCurrState.conY < 0.5 ) ) {
@@ -2405,8 +2437,8 @@ class Robot : public frc::TimedRobot {
          sCurrState.iIntakePercent = -60;     // Run intake backwards, too.
          m_motorIntake.Set( ControlMode::PercentOutput, -0.6 );
                                           // else if the shooter isn't running
-      } else if ( !(sCurrState.conX > 0.5) && !(sCurrState.conY > 0.5) && 
-                  !(sCurrState.conY < -0.5) &&
+      } else if ( !(sCurrState.conX >  0.5) && !(sCurrState.conY >  0.5) && 
+                  !(sCurrState.conX < -0.5) && !(sCurrState.conY < -0.5) &&
                   !( BUTTON_TARGET && BUTTON_REVERSE && ( 1 == limev ) ) ) {
                         // run the conveyor as needed (when cargo is in intake)
                         // unless in manual conveyor mode
@@ -2654,6 +2686,8 @@ class Robot : public frc::TimedRobot {
 #else
                  // 30 Amps below 5000 RPM, above 5000 RPM it ramps from
                  // 30 Amps down to 10 Amps at 5700 RPM
+                 // We may have to try different CurrentLimits here to
+                 // eliminate drivetrain chattering.
       m_motor.SetSmartCurrentLimit( 30, 10, 5000 );
 #endif
 
@@ -2684,6 +2718,8 @@ class Robot : public frc::TimedRobot {
       m_motorPID.SetSmartMotionMaxAccel(   5700, 0 );          // RPM/second
 
                /* Set ramp rate (how fast motor accelerates or decelerates) */
+                 // We may have to try different RampRates here to
+                 // eliminate drivetrain chattering.
       m_motor.SetClosedLoopRampRate(0.1);
       m_motor.SetOpenLoopRampRate(  0.1);
 
@@ -3436,7 +3472,7 @@ class Robot : public frc::TimedRobot {
             } else {
                         // Light these LEDs with a moving cascade of orange.
                if ( iBufNum == ( abs(50 - iLEDNum) % kNumLEDBufs ) ) {
-                  m_ledBufferArr[iBufNum][iLEDNum].SetHSV( 20, 64, 32 );
+                  m_ledBufferArr[iBufNum][iLEDNum].SetHSV( 14, 255, 127 );
                } else {
                   // m_ledBufferArr[iBufNum][iLEDNum].SetHSV(
                   //                  (iLEDNum*180)/kLEDStripLength, 255, 16 );
