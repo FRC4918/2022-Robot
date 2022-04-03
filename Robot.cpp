@@ -183,8 +183,9 @@ class Robot : public frc::TimedRobot {
       // index 10: 2 ball autonomous, no vision needed
       {  10,  M_DRIVE_STRAIGHT,     0.0,       0.0,         false },
       {  11,  M_DRIVE_STRAIGHT,     3.3,       0.0,         false }, // was true, removed to isolate from vision bugs
-      {  12,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
-      {  13,  M_SHOOT,              0.0,       0.0,         true  }, // shoots with whatever is on conX (Medium)
+      // {  12,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
+      {  12,  M_SHOOT,              0.0,       0.0,         true  }, // shoots with whatever is on conX (Medium)
+      {  13,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  14,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  15,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  16,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
@@ -1939,7 +1940,7 @@ class Robot : public frc::TimedRobot {
                dDesiredSpeed = 1.0;                            // go full speed
             } else {
                    // Otherwise speed is proportional to distance still needed.
-               dDesiredSpeed = 0.5 +
+               dDesiredSpeed = 0.2 +
                                   ( desiredDistance - dDistanceDriven ) / 10.0;
             }
          } else {                               // else we're driving backwards
@@ -1948,7 +1949,7 @@ class Robot : public frc::TimedRobot {
                dDesiredSpeed = -1.0;               // go full speed (backwards)
             } else {
                    // Otherwise speed is proportional to distance still needed.
-               dDesiredSpeed = -0.5 +
+               dDesiredSpeed = -0.2 +
                                   ( desiredDistance - dDistanceDriven ) / 10.0;
             }
          }
@@ -2106,7 +2107,7 @@ class Robot : public frc::TimedRobot {
          }
          sCurrState.dLimelightDistanceToGoal = (104.0 - 22.0)/12.0 /
                                         tan( (27.7 + limey) * 3.14159 / 180 );
-	 sCurrState.dLimelightDistanceToGoal -= 1.0;      // correction amount
+	 sCurrState.dLimelightDistanceToGoal -= 2.0;      // correction amount
          if ( sCurrState.dLimelightDistanceToGoal < 2.0 ) {
             sCurrState.dLimelightDistanceToGoal = 2.0;
          } else if ( 25.0 < sCurrState.dLimelightDistanceToGoal ) {
