@@ -1226,7 +1226,7 @@ class Robot : public frc::TimedRobot {
       dThrottle = std::max( 0.01, dThrottle );
       dThrottle = std::min( 1.0,  dThrottle );
       desiredForward = desiredForward * dThrottle;
-      desiredTurn    = desiredTurn    * dThrottle;
+      desiredTurn    = ( desiredTurn    * dThrottle ) * 0.9;
       // if ( 19 == iCallCount%200 ) {
          // cout << "Throttle/forward/turn " << dThrottle << "/"
          //      << desiredForward << "/" << desiredTurn << endl;
@@ -1240,9 +1240,9 @@ class Robot : public frc::TimedRobot {
 #else
                            // safety mode off: allow full range of -1.0 to 1.0
       desiredForward = std::min(  1.0, desiredForward );
-      desiredTurn    = std::min(  1.0, desiredTurn  );
+      desiredTurn    = std::min(  0.9, desiredTurn  );
       desiredForward = std::max( -1.0, desiredForward );
-      desiredTurn    = std::max( -1.0, desiredTurn  );
+      desiredTurn    = std::max( -0.9, desiredTurn  );
 #endif
       LSMasterOutput = -desiredForward - desiredTurn;
       RSMasterOutput = +desiredForward - desiredTurn;
@@ -2106,6 +2106,7 @@ class Robot : public frc::TimedRobot {
          }
          sCurrState.dLimelightDistanceToGoal = (104.0 - 22.0)/12.0 /
                                         tan( (27.7 + limey) * 3.14159 / 180 );
+	 sCurrState.dLimelightDistanceToGoal -= 1.0;      // correction amount
          if ( sCurrState.dLimelightDistanceToGoal < 2.0 ) {
             sCurrState.dLimelightDistanceToGoal = 2.0;
          } else if ( 25.0 < sCurrState.dLimelightDistanceToGoal ) {
