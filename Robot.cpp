@@ -2233,7 +2233,7 @@ class Robot : public frc::TimedRobot {
                   TSMotorState.targetVelocity_UnitsPer100ms - 100*4096/600 ) {
                  // set the motor velocity 100 RPM above what we want it to be
          m_motorTopShooter.Set( ControlMode::Velocity,
-                 TSMotorState.targetVelocity_UnitsPer100ms + 100 * 4096 / 600 );
+                 TSMotorState.targetVelocity_UnitsPer100ms + 50 * 4096 / 600 );
              // else if current speed is more than 500 RPM higher than desired
       } else if ( TSMotorState.targetVelocity_UnitsPer100ms + 500*4096/600 <
                                  sCurrState.iTSMasterVelocity ) {
@@ -2250,7 +2250,7 @@ class Robot : public frc::TimedRobot {
                   BSMotorState.targetVelocity_UnitsPer100ms - 100*4096/600 ) {
                  // set the motor velocity 100 RPM above what we want it to be
          m_motorBotShooter.Set( ControlMode::Velocity,
-               BSMotorState.targetVelocity_UnitsPer100ms + 100 * 4096 / 600 );
+               BSMotorState.targetVelocity_UnitsPer100ms + 50 * 4096 / 600 );
              // else if current speed is more than 500 RPM higher than desired
       } else if ( BSMotorState.targetVelocity_UnitsPer100ms + 500*4096/600 <
                                  sCurrState.iBSMasterVelocity ) {
@@ -3244,11 +3244,9 @@ class Robot : public frc::TimedRobot {
                           FeedbackDevice::CTRE_MagEncoder_Relative, 0, 10 ) ) {
          m_motorTopShooter.SelectProfileSlot( 0, 0 );
          m_motorTopShooter.Config_kF( 0, 0.035,    10 ); // 0.03 0.02 0.01
-         // m_motorTopShooter.Config_kP( 0, 0.35,    10 ); // 0.01 0.2 0.08
-         m_motorTopShooter.Config_kP( 0, 0.0,    10 ); // 0.01 0.2 0.08
+         m_motorTopShooter.Config_kP( 0, 0.20,    10 ); // 0.01 0.2 0.08 0.35
          m_motorTopShooter.Config_kI( 0, 0.0,     10 ); // was 0.0 0.00008
-         // m_motorTopShooter.Config_kD( 0, 4.0,     10 ); // 0.8
-         m_motorTopShooter.Config_kD( 0, 0.0,     10 ); // 0.8
+         m_motorTopShooter.Config_kD( 0, 0.0,     10 ); // 0.8 4.0
       } else {
          m_motorTopShooter.SelectProfileSlot( 0, 0 );
          m_motorTopShooter.Config_kF( 0, 0.01, 10 );   // may have to be higher
@@ -3262,11 +3260,9 @@ class Robot : public frc::TimedRobot {
                           FeedbackDevice::CTRE_MagEncoder_Relative, 0, 10 ) ) {
          m_motorBotShooter.SelectProfileSlot( 0, 0 );
          m_motorBotShooter.Config_kF( 0, 0.035,    10 ); // 0.02 0.01
-         // m_motorBotShooter.Config_kP( 0, 0.35,    10 ); // 0.3 0.2 0.08
-         m_motorBotShooter.Config_kP( 0, 0.00,    10 ); // 0.3 0.2 0.08
+         m_motorBotShooter.Config_kP( 0, 0.20,    10 ); // 0.3 0.2 0.08 0.35
          m_motorBotShooter.Config_kI( 0, 0.0,     10 ); // 0.0 0.00008
-         // m_motorBotShooter.Config_kD( 0, 4.0,     10 ); // 0.8
-         m_motorBotShooter.Config_kD( 0, 0.0,     10 ); // 0.8
+         m_motorBotShooter.Config_kD( 0, 0.0,     10 ); // 0.8 4.0
       } else {
          m_motorBotShooter.SelectProfileSlot( 0, 0 );
          m_motorBotShooter.Config_kF( 0, 0.01, 10 );   // may have to be higher
