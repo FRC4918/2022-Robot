@@ -184,7 +184,7 @@ class Robot : public frc::TimedRobot {
       {  10,  M_DRIVE_STRAIGHT,     0.0,       0.0,         false },
       {  11,  M_DRIVE_STRAIGHT,     3.3,       0.0,         false }, // was true, removed to isolate from vision bugs
       {  12,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false },
-      {  13,  M_SHOOT,              0.0,       0.0,         false }, // shoots with whatever is on conX (Medium)
+      {  13,  M_SHOOT,              0.0,       0.0,         true  }, // shoots with whatever is on conX (Medium)
       {  14,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  15,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  16,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
@@ -202,23 +202,24 @@ class Robot : public frc::TimedRobot {
       {  28,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  29,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
-      // index 0: 3 ball autonomous
-      {  30,  M_DRIVE_STRAIGHT,     2.3,       0.0,         false },
-      {  31,  M_DRIVE_STRAIGHT,     1.0,       0.0,         true  },
+      // index 30: 3 ball autonomous
+      {  30,  M_DRIVE_STRAIGHT,     1.3,       0.0,         false },
+      {  31,  M_DRIVE_STRAIGHT,     2.0,       0.0,         true  },
       {  32,  M_WAIT,              50.0,       0.0,         true  },
       {  33,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false }, 
       {  34,  M_LIMELOCK,           0.0,       0.0,         false },
       {  35,  M_SHOOT,              0.0,       0.0,         true  },
-      {  36,  M_ROTATE,             0.0,    -100.0,         false },
-      {  37,  M_DRIVE_STRAIGHT,     5.0,    -100.0,         false },
-      {  38,  M_DRIVE_STRAIGHT,     3.0,    -100.0,         true  },
+      {  36,  M_ROTATE,             0.0,    - 90.0,         false },
+      {  37,  M_DRIVE_STRAIGHT,     4.0,    - 90.0,         false },
+      {  38,  M_DRIVE_STRAIGHT,     4.0,    - 90.0,         true  },
       {  39,  M_WAIT,              50.0,       0.0,         true  },
 
       {  40,  M_ROTATE,             0.0,     -45.0,         false },
       {  41,  M_DRIVE_STRAIGHT,     1.0,     -45.0,         false }, 
       {  42,  M_LIMELOCK,           0.0,       0.0,         false },
       {  43,  M_SHOOT,              0.0,       0.0,         true  },
-      {  44,  M_ROTATE,             0.0,     -80.0,         false },
+//      {  44,  M_ROTATE,             0.0,     -80.0,         false },
+      {  44,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  45,  M_DRIVE_STRAIGHT,    10.0,     -80.0,         false },
       {  46,  M_DRIVE_STRAIGHT,     3.5,     -80.0,         true },
       {  47,  M_WAIT,             150.0,       0.0,         true  },
@@ -237,16 +238,16 @@ class Robot : public frc::TimedRobot {
       {  58,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
       {  59,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
-      // index 0: 5 ball autonomous
-      {  60,  M_DRIVE_STRAIGHT,     2.3,       0.0,         false },
-      {  61,  M_DRIVE_STRAIGHT,     1.0,       0.0,         true  },
+      // index 60: 5 ball autonomous
+      {  60,  M_DRIVE_STRAIGHT,     1.3,       0.0,         false },
+      {  61,  M_DRIVE_STRAIGHT,     2.0,       0.0,         true  },
       {  62,  M_WAIT,              50.0,       0.0,         true  },
       {  63,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false }, 
       {  64,  M_LIMELOCK,           0.0,       0.0,         false },
       {  65,  M_SHOOT,              0.0,       0.0,         false },
-      {  66,  M_ROTATE,             0.0,    -100.0,         false },
-      {  67,  M_DRIVE_STRAIGHT,     5.0,    -100.0,         false },
-      {  68,  M_DRIVE_STRAIGHT,     3.0,    -100.0,         true  },
+      {  66,  M_ROTATE,             0.0,    - 90.0,         false },
+      {  67,  M_DRIVE_STRAIGHT,     4.0,    - 90.0,         false },
+      {  68,  M_DRIVE_STRAIGHT,     4.0,    - 90.0,         true  },
       {  69,  M_WAIT,              50.0,       0.0,         true  },
 
       {  70,  M_ROTATE,             0.0,     -45.0,         false },
@@ -684,11 +685,11 @@ class Robot : public frc::TimedRobot {
 
                                           // if in bottom-left corner (bumper)
                if ( ( (int)v3fCircles[i][0] < 40  ) &&
-                    ( 220 < (int)v3fCircles[i][1] )   ) {
+                    ( 180 < (int)v3fCircles[i][1] )   ) {
                   continue;                                          // skip it
                               // else if in bottom-right corner (bumper)
                } else if ( ( 280 < (int)v3fCircles[i][0] ) &&
-                           ( 220 < (int)v3fCircles[i][1] )   ) {
+                           ( 180 < (int)v3fCircles[i][1] )   ) {
                   continue;                                          // skip it
                }
 
@@ -1550,7 +1551,7 @@ class Robot : public frc::TimedRobot {
              // Now calculate how hard we want to turn (right-turn-positive).
              // Since we now account for yaw rate in deciding when to end the
              // turn, we can be a little more aggressive in starting the turn:
-         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/30.0;
+         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/60.0;
          dDesiredTurn = std::max( -1.0, dDesiredTurn );
          dDesiredTurn = std::min(  1.0, dDesiredTurn );
       if ( 0 == iCallCount%100 )  {
@@ -2211,7 +2212,9 @@ class Robot : public frc::TimedRobot {
             cout << "Shooters: " <<
                     sCurrState.dLimelightDesiredShooterSpeed << endl;
        }
-      } else if ( ( -0.5 < sCurrState.conY       ) && 
+      } else if ( ( -0.5 < sCurrState.conX       ) && 
+                  (        sCurrState.conX < 0.5 ) &&
+                  ( -0.5 < sCurrState.conY       ) && 
                   (        sCurrState.conY < 0.5 ) ) {
                                    // else spin the shooter motors down slowly
          sCurrState.dLimelightDesiredShooterSpeed = 0.0;
@@ -2219,10 +2222,10 @@ class Robot : public frc::TimedRobot {
 //                0.95 * (double)m_motorTopShooter.GetSelectedSensorVelocity();
          BSMotorState.targetVelocity_UnitsPer100ms = 0.0;
 //                0.95 * (double)m_motorBotShooter.GetSelectedSensorVelocity();
-      } else {
-         sCurrState.dLimelightDesiredShooterSpeed = 0.0;
-         TSMotorState.targetVelocity_UnitsPer100ms = 0.0;
-         BSMotorState.targetVelocity_UnitsPer100ms = 0.0;
+//      } else {
+//         sCurrState.dLimelightDesiredShooterSpeed = 0.0;
+//         TSMotorState.targetVelocity_UnitsPer100ms = 0.0;
+//         BSMotorState.targetVelocity_UnitsPer100ms = 0.0;
       }
                    // Top shooter:
                    // if current speed is more than 100 RPM lower than desired
@@ -2231,8 +2234,8 @@ class Robot : public frc::TimedRobot {
                  // set the motor velocity 100 RPM above what we want it to be
          m_motorTopShooter.Set( ControlMode::Velocity,
                  TSMotorState.targetVelocity_UnitsPer100ms + 100 * 4096 / 600 );
-             // else if current speed is more than 100 RPM higher than desired
-      } else if ( TSMotorState.targetVelocity_UnitsPer100ms + 100*4096/600 <
+             // else if current speed is more than 500 RPM higher than desired
+      } else if ( TSMotorState.targetVelocity_UnitsPer100ms + 500*4096/600 <
                                  sCurrState.iTSMasterVelocity ) {
               // Set motor speed to 0.  This is OK even if the desired speed
               // is 0, because we have configured the shooter motors to never
@@ -2249,7 +2252,7 @@ class Robot : public frc::TimedRobot {
          m_motorBotShooter.Set( ControlMode::Velocity,
                BSMotorState.targetVelocity_UnitsPer100ms + 100 * 4096 / 600 );
              // else if current speed is more than 500 RPM higher than desired
-      } else if ( BSMotorState.targetVelocity_UnitsPer100ms - 500*4096/600 <
+      } else if ( BSMotorState.targetVelocity_UnitsPer100ms + 500*4096/600 <
                                  sCurrState.iBSMasterVelocity ) {
               // Set motor speed to 0.  This is OK even if the desired speed
               // is 0, because we have configured the shooter motors to never
@@ -2292,7 +2295,7 @@ class Robot : public frc::TimedRobot {
                                          // run the conveyor to shoot the balls
             sCurrState.iConveyPercent = 100;
             m_motorConveyMaster.Set( ControlMode::PercentOutput, 1.0 );
-            m_motorIntake.Set( ControlMode::PercentOutput, 1.0 ); // be strong
+            m_motorIntake.Set( ControlMode::PercentOutput, 0.5 ); // be strong
          }
       } else if ( ( 0.5 < sPrevState.conY  ) ||    // else if X- or Y-stick WAS
                   ( sPrevState.conY < -0.5 ) ||    // pushed in any "shoot"
@@ -2688,7 +2691,7 @@ class Robot : public frc::TimedRobot {
                  // 30 Amps down to 10 Amps at 5700 RPM
                  // We may have to try different CurrentLimits here to
                  // eliminate drivetrain chattering.
-      m_motor.SetSmartCurrentLimit( 30, 10, 5000 );
+      m_motor.SetSmartCurrentLimit( 80, 10, 5000 );
 #endif
 
                                           // Config 100% motor output to 12.0V
@@ -3240,10 +3243,12 @@ class Robot : public frc::TimedRobot {
       if ( OK == m_motorTopShooter.ConfigSelectedFeedbackSensor(
                           FeedbackDevice::CTRE_MagEncoder_Relative, 0, 10 ) ) {
          m_motorTopShooter.SelectProfileSlot( 0, 0 );
-         m_motorTopShooter.Config_kF( 0, 0.03,    10 ); // 0.03 0.02 0.01
-         m_motorTopShooter.Config_kP( 0, 0.35,    10 ); // 0.01 0.2 0.08
+         m_motorTopShooter.Config_kF( 0, 0.035,    10 ); // 0.03 0.02 0.01
+         // m_motorTopShooter.Config_kP( 0, 0.35,    10 ); // 0.01 0.2 0.08
+         m_motorTopShooter.Config_kP( 0, 0.0,    10 ); // 0.01 0.2 0.08
          m_motorTopShooter.Config_kI( 0, 0.0,     10 ); // was 0.0 0.00008
-         m_motorTopShooter.Config_kD( 0, 4.0,     10 ); // 0.8
+         // m_motorTopShooter.Config_kD( 0, 4.0,     10 ); // 0.8
+         m_motorTopShooter.Config_kD( 0, 0.0,     10 ); // 0.8
       } else {
          m_motorTopShooter.SelectProfileSlot( 0, 0 );
          m_motorTopShooter.Config_kF( 0, 0.01, 10 );   // may have to be higher
@@ -3256,10 +3261,12 @@ class Robot : public frc::TimedRobot {
       if ( OK == m_motorBotShooter.ConfigSelectedFeedbackSensor(
                           FeedbackDevice::CTRE_MagEncoder_Relative, 0, 10 ) ) {
          m_motorBotShooter.SelectProfileSlot( 0, 0 );
-         m_motorBotShooter.Config_kF( 0, 0.03,    10 ); // 0.02 0.01
-         m_motorBotShooter.Config_kP( 0, 0.35,    10 ); // 0.3 0.2 0.08
+         m_motorBotShooter.Config_kF( 0, 0.035,    10 ); // 0.02 0.01
+         // m_motorBotShooter.Config_kP( 0, 0.35,    10 ); // 0.3 0.2 0.08
+         m_motorBotShooter.Config_kP( 0, 0.00,    10 ); // 0.3 0.2 0.08
          m_motorBotShooter.Config_kI( 0, 0.0,     10 ); // 0.0 0.00008
-         m_motorBotShooter.Config_kD( 0, 4.0,     10 ); // 0.8
+         // m_motorBotShooter.Config_kD( 0, 4.0,     10 ); // 0.8
+         m_motorBotShooter.Config_kD( 0, 0.0,     10 ); // 0.8
       } else {
          m_motorBotShooter.SelectProfileSlot( 0, 0 );
          m_motorBotShooter.Config_kF( 0, 0.01, 10 );   // may have to be higher
@@ -3458,21 +3465,21 @@ class Robot : public frc::TimedRobot {
                         // the USB videocamera detect the cargo balls we want.
                if ( WeAreOnRedAlliance ) {
                                                   // fully-saturated pure red
-                  m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 255, 0, 0 );
+                  m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 192, 0, 0 );
                } else {
                                                   // fully-saturated pure blue
-                  m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 0, 255);
+                  m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 0, 192);
                }
             } else if ( ( 71 < iLEDNum ) && ( iLEDNum < 77 ) ) {
                        // Light these LEDs green to help the limelight camera.
-               m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 255, 0);
+               m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 192, 0);
             } else if ( ( 21 < iLEDNum ) && ( iLEDNum < 27 ) ) {
                        // Light these LEDs green to help the limelight camera.
-               m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 255, 0);
+               m_ledBufferArr[iBufNum][iLEDNum].SetRGB( 0, 192, 0);
             } else {
                         // Light these LEDs with a moving cascade of orange.
                if ( iBufNum == ( abs(50 - iLEDNum) % kNumLEDBufs ) ) {
-                  m_ledBufferArr[iBufNum][iLEDNum].SetHSV( 14, 255, 127 );
+                  m_ledBufferArr[iBufNum][iLEDNum].SetHSV( 14, 255,  64 );
                } else {
                   // m_ledBufferArr[iBufNum][iLEDNum].SetHSV(
                   //                  (iLEDNum*180)/kLEDStripLength, 255, 16 );
@@ -3563,7 +3570,8 @@ class Robot : public frc::TimedRobot {
       } else if ( BUTTON_SWITCH4 ) {
          mSeqIndex = 60;               // 5-ball auto
       } else {
-         mSeqIndex =  8;             // no switch flipped, do nothing
+         mSeqIndex = 10;             // 2-ball auto
+         // mSeqIndex =  8;             // no switch flipped, do nothing
                                      // (points to M_TERMINATE_SEQ, for safety)
       }
 
