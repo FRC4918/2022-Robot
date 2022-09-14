@@ -245,7 +245,7 @@ class Robot : public frc::TimedRobot {
       {  62,  M_WAIT,              50.0,       0.0,         true  },
       {  63,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false }, 
       {  64,  M_LIMELOCK,           0.0,       0.0,         false },
-      {  65,  M_SHOOT,              0.0,       0.0,         false },
+      {  65,  M_SHOOT,              0.0,       0.0,         true  },
       {  66,  M_ROTATE,             0.0,    - 90.0,         false },
       {  67,  M_DRIVE_STRAIGHT,     4.0,    - 90.0,         false },
       {  68,  M_DRIVE_STRAIGHT,     4.0,    - 90.0,         true  },
@@ -254,7 +254,7 @@ class Robot : public frc::TimedRobot {
       {  70,  M_ROTATE,             0.0,     -45.0,         false },
       {  71,  M_DRIVE_STRAIGHT,     1.0,     -45.0,         false }, 
       {  72,  M_LIMELOCK,           0.0,       0.0,         false },
-      {  73,  M_SHOOT,              0.0,       0.0,         false },
+      {  73,  M_SHOOT,              0.0,       0.0,         true  },
       {  74,  M_ROTATE,             0.0,     -80.0,         false },
       {  75,  M_DRIVE_STRAIGHT,    10.0,     -80.0,         false },
       {  76,  M_DRIVE_STRAIGHT,     3.5,     -80.0,         true },
@@ -263,7 +263,7 @@ class Robot : public frc::TimedRobot {
       {  79,  M_DRIVE_STRAIGHT,    -6.0,     -60.0,         false }, 
 
       {  80,  M_LIMELOCK,           0.0,       0.0,         false },
-      {  81,  M_SHOOT,              0.0,       0.0,         false },
+      {  81,  M_SHOOT,              0.0,       0.0,         true  },
       {  82,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
 
       {  83,  M_TERMINATE_SEQ,      0.0,       0.0,         false },
@@ -338,9 +338,9 @@ class Robot : public frc::TimedRobot {
       // Console button  1 (the left-top pushbutton switch on the console)
       // runs the climber up.
 #define BUTTON_BLUECLIMBERUP            ( sCurrState.conButton[3] )
-#define BUTTON_BLUECLIMBERUP_PREV       ( sPrevState.conButton[1] )
+#define BUTTON_BLUECLIMBERUP_PREV       ( sPrevState.conButton[3] )
 #define BUTTON_REDCLIMBERUP            ( sCurrState.conButton[4] )
-#define BUTTON_REDCLIMBERUP_PREV       ( sPrevState.conButton[2] )
+#define BUTTON_REDCLIMBERUP_PREV       ( sPrevState.conButton[4] )
       // Console button  5 (the center-top pushbutton switch on the console)
       // runs the conveyor forward.
 #define BUTTON_CONVEYORFORWARD      ( sCurrState.conButton[5] )
@@ -348,9 +348,9 @@ class Robot : public frc::TimedRobot {
       // Console button  3 (the right-top pushbutton switch on the console)
       // runs the climber down.
 #define BUTTON_BLUECLIMBERDOWN          ( sCurrState.conButton[1] )
-#define BUTTON_BLUECLIMBERDOWN_PREV     ( sPrevState.conButton[3] )
+#define BUTTON_BLUECLIMBERDOWN_PREV     ( sPrevState.conButton[1] )
 #define BUTTON_REDCLIMBERDOWN           ( sCurrState.conButton[2] )
-#define BUTTON_REDCLIMBERDOWN_PREV      ( sPrevState.conButton[4] )
+#define BUTTON_REDCLIMBERDOWN_PREV      ( sPrevState.conButton[2] )
       // Console button  4 (the centermost pushbutton switch on the console)
       // runs the conveyor backward.
 #define BUTTON_CONVEYORBACKWARD        ( sCurrState.conButton[8] )
@@ -1082,7 +1082,7 @@ class Robot : public frc::TimedRobot {
       /* Display all the joystick values on the console log.                 */
       /*---------------------------------------------------------------------*/
    void JoystickDisplay( void ) {
-         cout << "joy (y/x): " << setw(8) << sCurrState.joyY << "/" <<
+      cout << "joy (y/x): " << setw(8) << sCurrState.joyY << "/" <<
                  setw(8) << sCurrState.joyX << endl;
    }
 
@@ -1092,14 +1092,14 @@ class Robot : public frc::TimedRobot {
       /* Display all the yaw pitch & roll values on the console log.         */
       /*---------------------------------------------------------------------*/
    void IMUOrientationDisplay( void ) {
-//       cout << "pigeonIMU (yaw/pitch/roll): " <<
-         cout << "ADIS_IMU (yaw/pitch/roll+yrate): " <<
+//    cout << "pigeonIMU (yaw/pitch/roll): " <<
+      cout << "ADIS_IMU (yaw/pitch/roll+yrate): " <<
                sCurrState.yawPitchRoll[0] << "/" <<
                sCurrState.yawPitchRoll[1] << "/" <<
                sCurrState.yawPitchRoll[2] << "+" <<
                sCurrState.rateXYZ[2] << endl;
-//         cout << "pigeontemp: " << pigeonIMU.GetTemp() << endl; 
-//         cout << "gyro_temp: " << gyro.GetTemp() << endl; 
+//    cout << "pigeontemp: " << pigeonIMU.GetTemp() << endl; 
+//    cout << "gyro_temp: " << gyro.GetTemp() << endl; 
    }      // IMUOrientationDisplay()
 
 
@@ -1555,9 +1555,10 @@ class Robot : public frc::TimedRobot {
          dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/60.0;
          dDesiredTurn = std::max( -1.0, dDesiredTurn );
          dDesiredTurn = std::min(  1.0, dDesiredTurn );
-      if ( 0 == iCallCount%100 )  {
-         cout << "dDesiredTurn: " << dEventualYawPosition << ":" << dDesiredYaw << ":" << dDesiredTurn << endl;
-      }
+         if ( 0 == iCallCount%100 )  {
+            cout << "dDesiredTurn: " << dEventualYawPosition << ":" <<
+                    dDesiredYaw << ":" << dDesiredTurn << endl;
+         }
 
          // May have to add/subtract a constant from limex here, to account
          // for the offset of the camera away from the centerline of the robot.
@@ -1646,11 +1647,11 @@ class Robot : public frc::TimedRobot {
          cargoOnVideo.Y = std::max( -120, cargoOnVideo.Y );
          cargoOnVideo.Y = std::min(  120, cargoOnVideo.Y );
          dDesiredYaw = sCurrState.yawPosnEstimate -
-                180.0 * 3.14156 * cargoOnVideo.X / ( 300.0 + cargoOnVideo.Y );
+                (180.0/3.14156) * cargoOnVideo.X / ( 300.0 + cargoOnVideo.Y );
          dEventualYawPosition = sCurrState.yawPosnEstimate + ( 0.5 / 600.0 ) *
                                               sCurrState.yawRateEstimate *
                                               abs(sCurrState.yawRateEstimate);
-         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/50.0;
+         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/100.0;
          dDesiredTurn = std::max( -1.0, dDesiredTurn );
          dDesiredTurn = std::min(  1.0, dDesiredTurn );
 
@@ -1752,6 +1753,12 @@ class Robot : public frc::TimedRobot {
                                 // Then autonomously drive towards the target.
          sCurrState.joyZ = 0.0; // Set throttle to 1/2 power; do we want this?
                                 // Can't we use normal joyZ paddle setting?
+                                // YES: we need it to keep limelight aiming
+                                // consistent; without this the robot cannot
+                                // aim at the limelight target very well,
+                                // when the forward speed is close to zero,
+                                // because the robot doesn't turn very well at
+                                // zero forward speed.
          DriveToLimelightTarget();
 
                // If the console button 12 (the leftmost missile switch) is on
@@ -1987,7 +1994,7 @@ class Robot : public frc::TimedRobot {
             cargoOnVideo.Y = std::max( -120, cargoOnVideo.Y );
             cargoOnVideo.Y = std::min(  120, cargoOnVideo.Y );
             desiredYaw = sCurrState.yawPosnEstimate -
-                180.0 * 3.14156 * cargoOnVideo.X / ( 300.0 + cargoOnVideo.Y );
+                (180.0/3.14156) * cargoOnVideo.X / ( 300.0 + cargoOnVideo.Y );
          }
 
                  // Calculate the Yaw Position we'd arrive at (when we came to
@@ -2013,7 +2020,7 @@ class Robot : public frc::TimedRobot {
 //            m_motorRSMaster.SetIntegralAccumulator( 0.0 );
             cout << "D2D() has a cargo ball!" << endl;
             bReturnValue = true;                    // tell caller we are done
-         } else{
+         } else {
             bReturnValue = false;          // tell caller we are still driving
          }
 
@@ -2059,15 +2066,15 @@ class Robot : public frc::TimedRobot {
          TSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms =  800 * 4096 / 600;
       } else if ( !( 0.5 < sCurrState.conY ) &&
-                   ( 0.5 < sPrevState.conY ) ) {     // newly-released downward
+                   ( 0.5 < sPrevState.conY ) ) {    // newly-released downward
          TSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
          
-      } else if (( sCurrState.conX < -0.5 ) &&  //newly pressed leftward
+      } else if (( sCurrState.conX < -0.5 ) &&      // newly pressed leftward
                !( sPrevState.conX < -0.5 )) {
          TSMotorState.targetVelocity_UnitsPer100ms =  2700 * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms =  2600 * 4096 / 600;
-      } else if (!( sCurrState.conX < -0.5 ) &&  //newly released leftward
+      } else if (!( sCurrState.conX < -0.5 ) &&     // newly released leftward
                ( sPrevState.conX < -0.5 ) ) {
          TSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
@@ -2075,21 +2082,18 @@ class Robot : public frc::TimedRobot {
                   !( sPrevState.conY < -0.5 ) ) { // is newly-pressed upward
          TSMotorState.targetVelocity_UnitsPer100ms =  3000 * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms =  2950 * 4096 / 600;
-      } else if ( !( sCurrState.conY < -0.5 ) &&
-                   ( sPrevState.conY < -0.5 ) ) {     // newly-released upward
+      } else if ( !( sCurrState.conY < -0.5 ) &&    // newly-released upward
+                   ( sPrevState.conY < -0.5 ) ) {
          TSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
-      }       /*** Following code for testing only - slowly spit out balls
-               when console "joystick" is pushed in the positive direction ***/
-      else if ( ( sCurrState.conX > 0.5 ) &&  //newly pressed rightward
+      } else if ( ( sCurrState.conX > 0.5 ) &&      // newly pressed rightward
                !( sPrevState.conX > 0.5 ) ) {
          TSMotorState.targetVelocity_UnitsPer100ms =  2250 * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms =  2050 * 4096 / 600;
-      } else if ( !( sCurrState.conX > 0.5 ) && //newly released rightward
+      } else if ( !( sCurrState.conX > 0.5 ) &&     // newly released rightward
                    ( sPrevState.conX > 0.5 ) ) {
          TSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms = 0 * 4096 / 600;
-      /***End of testing code***/
                      // If commanded to shoot based on the limelight data
                      // (this is the same if statement used elsewhere to
                      //  decide if DriveToLimelightTarget() should be called).
@@ -2107,16 +2111,16 @@ class Robot : public frc::TimedRobot {
          }
          sCurrState.dLimelightDistanceToGoal = (104.0 - 22.0)/12.0 /
                                         tan( (27.7 + limey) * 3.14159 / 180 );
-	 sCurrState.dLimelightDistanceToGoal -= 2.0;      // correction amount
+         sCurrState.dLimelightDistanceToGoal -= 2.0;      // correction amount
          if ( sCurrState.dLimelightDistanceToGoal < 2.0 ) {
             sCurrState.dLimelightDistanceToGoal = 2.0;
          } else if ( 25.0 < sCurrState.dLimelightDistanceToGoal ) {
             sCurrState.dLimelightDistanceToGoal = 25.0;
          }
-       if ( 18 == iCallCount%100 ) {                      // Every 2 seconds
+         if ( 18 == iCallCount%100 ) {                      // Every 2 seconds
             cout << "LimeY/LimeDist2Goal: " << limex << "/" << limey << "/" <<
                     sCurrState.dLimelightDistanceToGoal << endl;
-       }
+         }
                    // By the time the cargo ball lands, the distance will be
                    // a little different, depending on the current speed of
                    // the robot.  So allow for that here.
@@ -2150,13 +2154,13 @@ class Robot : public frc::TimedRobot {
          } else if ( 18.0 < sCurrState.dLimelightDistanceToGoal ) {
             sCurrState.dLimelightDistanceToGoal = 18.0;
          }
-       if ( 19 == iCallCount%100 ) {                      // Every 2 seconds
+         if ( 19 == iCallCount%100 ) {                      // Every 2 seconds
             cout << "LimeDist2Goal2: " <<
                                   sCurrState.dLimelightDistanceToGoal << endl;
-       } else if ( 20 == iCallCount%100 ) {
+         } else if ( 20 == iCallCount%100 ) {
             cout << "RobotSpeed/FlightTime: " << dRobotSpeed << "/" <<
                                                  dTimeOfFlight << endl;
-       }
+         }
 
                    // The shooter needs to be at about 2100 RPM (top shooter)
                    // just to get the cargo ball up to the height of the goal,
@@ -2192,7 +2196,7 @@ class Robot : public frc::TimedRobot {
                 // But this equation does better; it gives
                 //                     2111 RPM at  6', 2255 RPM at 9',
                 //                     2536 RPM at 12', 3000 RPM at 15'.
-           sCurrState.dLimelightDesiredShooterSpeed = 2050.0 +
+            sCurrState.dLimelightDesiredShooterSpeed = 2050.0 +
                      0.2815 * sCurrState.dLimelightDistanceToGoal *
                               sCurrState.dLimelightDistanceToGoal *
                               sCurrState.dLimelightDistanceToGoal;
@@ -2210,10 +2214,10 @@ class Robot : public frc::TimedRobot {
               (sCurrState.dLimelightDesiredShooterSpeed        ) * 4096 / 600;
          BSMotorState.targetVelocity_UnitsPer100ms =
               (sCurrState.dLimelightDesiredShooterSpeed -  50.0) * 4096 / 600;
-       if ( 21 == iCallCount%100 ) {                      // Every 2 seconds
-            cout << "Shooters: " <<
-                    sCurrState.dLimelightDesiredShooterSpeed << endl;
-       }
+         if ( 21 == iCallCount%100 ) {                      // Every 2 seconds
+              cout << "Shooters: " <<
+                      sCurrState.dLimelightDesiredShooterSpeed << endl;
+         }
       } else if ( ( -0.5 < sCurrState.conX       ) && 
                   (        sCurrState.conX < 0.5 ) &&
                   ( -0.5 < sCurrState.conY       ) && 
@@ -2221,19 +2225,13 @@ class Robot : public frc::TimedRobot {
                                    // else spin the shooter motors down slowly
          sCurrState.dLimelightDesiredShooterSpeed = 0.0;
          TSMotorState.targetVelocity_UnitsPer100ms = 0.0;
-//                0.95 * (double)m_motorTopShooter.GetSelectedSensorVelocity();
          BSMotorState.targetVelocity_UnitsPer100ms = 0.0;
-//                0.95 * (double)m_motorBotShooter.GetSelectedSensorVelocity();
-//      } else {
-//         sCurrState.dLimelightDesiredShooterSpeed = 0.0;
-//         TSMotorState.targetVelocity_UnitsPer100ms = 0.0;
-//         BSMotorState.targetVelocity_UnitsPer100ms = 0.0;
       }
                    // Top shooter:
                    // if current speed is more than 100 RPM lower than desired
       if ( sCurrState.iTSMasterVelocity <
                   TSMotorState.targetVelocity_UnitsPer100ms - 100*4096/600 ) {
-                 // set the motor velocity 100 RPM above what we want it to be
+                 // set the motor velocity 50 RPM above what we want it to be
          m_motorTopShooter.Set( ControlMode::Velocity,
                  TSMotorState.targetVelocity_UnitsPer100ms + 50 * 4096 / 600 );
              // else if current speed is more than 500 RPM higher than desired
@@ -2250,7 +2248,7 @@ class Robot : public frc::TimedRobot {
                    // if current speed is more than 100 RPM lower than desired
       if ( sCurrState.iBSMasterVelocity <
                   BSMotorState.targetVelocity_UnitsPer100ms - 100*4096/600 ) {
-                 // set the motor velocity 100 RPM above what we want it to be
+                 // set the motor velocity 50 RPM above what we want it to be
          m_motorBotShooter.Set( ControlMode::Velocity,
                BSMotorState.targetVelocity_UnitsPer100ms + 50 * 4096 / 600 );
              // else if current speed is more than 500 RPM higher than desired
@@ -2264,10 +2262,28 @@ class Robot : public frc::TimedRobot {
       }
 
       if ( 0 == iCallCount%100 )  {   // every 2 seconds (at 2.00)
+                        // If the top shooter motor has been commanded to spin
+                        // at more than 500 RPM
+         if ( 500.0*4096.0/600.0 < TSMotorState.targetVelocity_UnitsPer100ms )
+         {
+            m_motorTopShooter.Set( ControlMode::Velocity,
+                 TSMotorState.targetVelocity_UnitsPer100ms + 50 * 4096 / 600 );
+         } else {
+            m_motorTopShooter.Set( ControlMode::Velocity, 0 );
+         }
          if ( 100.0 < abs(m_motorTopShooter.GetSelectedSensorVelocity()) ) {
             MotorDisplay( "TS:", m_motorTopShooter, TSMotorState );
          }
       } else if ( 1 == iCallCount%100 )  {   // every 2 seconds (at 2.02)
+                     // If the bottom shooter motor has been commanded to spin
+                     // at more than 500 RPM
+         if ( 500.0*4096.0/600.0 < BSMotorState.targetVelocity_UnitsPer100ms )
+         {
+            m_motorBotShooter.Set( ControlMode::Velocity,
+                 BSMotorState.targetVelocity_UnitsPer100ms + 50 * 4096 / 600 );
+         } else {
+            m_motorBotShooter.Set( ControlMode::Velocity, 0 );
+         }
          if ( 100.0 < abs(m_motorBotShooter.GetSelectedSensorVelocity()) ) {
             MotorDisplay( "BS:", m_motorBotShooter, BSMotorState );
          }
@@ -2473,7 +2489,7 @@ class Robot : public frc::TimedRobot {
 
 
       /*---------------------------------------------------------------------*/
-      /* RunBlueClimberPole()                                                    */
+      /* RunBlueClimberPole()                                                */
       /* Extend or retract the telescoping climber pole.                     */
       /*---------------------------------------------------------------------*/
    void RunBlueClimberPole( rev::CANSparkMax & m_motorClimberPole,
@@ -2534,7 +2550,7 @@ class Robot : public frc::TimedRobot {
    }      // RunBlueClimberPole() 
 
       /*---------------------------------------------------------------------*/
-      /* RunRedClimberPole()                                                    */
+      /* RunRedClimberPole()                                                 */
       /* Extend or retract the telescoping climber pole.                     */
       /*---------------------------------------------------------------------*/
    void RunRedClimberPole( rev::CANSparkMax & m_motorClimberPole,
@@ -2596,7 +2612,7 @@ class Robot : public frc::TimedRobot {
 
 
       /*---------------------------------------------------------------------*/
-      /* MotorInitSparkBrushed()                                                    */
+      /* MotorInitSparkBrushed()                                             */
       /* Setup the initial configuration of a brushed motor, driven by a     */
       /* Spark Max controller.  These settings can be superseded after this  */
       /* function is called, for the needs of each specific SparkMax-driven  */
@@ -3273,6 +3289,9 @@ class Robot : public frc::TimedRobot {
          m_motorBotShooter.Config_kD( 0, 0.0,  10 );
       }
 
+      TSMotorState.targetVelocity_UnitsPer100ms = 0;
+      BSMotorState.targetVelocity_UnitsPer100ms = 0;
+
       m_motorConveyMaster.SetNeutralMode( NeutralMode::Brake );
 
       iCallCount++;
@@ -3287,6 +3306,10 @@ class Robot : public frc::TimedRobot {
 
       LEDInit();   // initialize all LED sequences
 
+      m_motorLSMaster.BurnFlash();   // Save all settings permanently in
+      m_motorLSFollow.BurnFlash();   // the SparkMax, so the settings survive
+      m_motorRSMaster.BurnFlash();   // even through a brownout.
+      m_motorRSFollow.BurnFlash();
    }      // RobotInit()
 
 
@@ -3699,9 +3722,9 @@ class Robot : public frc::TimedRobot {
       RunConveyor();
 
       RunBlueClimberPole( m_motorLSClimber, m_LSClimberForwardLimitSwitch,
-                                        m_LSClimberReverseLimitSwitch );
+                                            m_LSClimberReverseLimitSwitch );
       RunRedClimberPole( m_motorRSClimber, m_RSClimberForwardLimitSwitch,
-                                        m_RSClimberReverseLimitSwitch );
+                                           m_RSClimberReverseLimitSwitch );
       SwitchCameraIfNecessary();
 
       if ( 0 == iCallCount%100000 )  {   // every 2000 seconds
@@ -3727,5 +3750,51 @@ bool Robot::WeAreOnRedAlliance = { true };
 
 #ifndef RUNNING_FRC_TESTS
 int main() { return frc::StartRobot<Robot>(); }
+#endif
+
+#ifdef JAG_TEMPORARY_NOTES
+Things to do:
+  1. Lines 340-353 #DEFINE corrections  (Verify which buttons are forward and
+                 which are backward, and which are blue and which are red)
+# 2. lines 3297 (end of RobotInit() )
+#    add calls to flash all motors (maybe sparks only)
+#    CANSparkMax:BurnFlash();    (codedocs.revrobotics.com)
+# 3. line 1753 (joyZ = 0.0; )
+#    Comment out this line and test to make sure robot obeys joyZ- speed
+#    when shooting cargo.  (Tried this and it threw off the limelight aiming,
+#    because we have never tuned that aiming at different forward speeds.
+#    Until we can tune it better, we will need to keep the forward speed
+#    consistent, so for now we will leave this line alone.)
+# 4. line 2149 ( "-=" to adjust dLimelightDistanceToGoal based on robot speed)
+#    test to make sure this should be "-=" and not "+=".
+#    YES; we tested this and it is correct.
+# 5. lines 2247 and 2264 (end of shooter motor speed - setting if_else )
+#    add else clause to set speeds to targetVelocity_Units_...
+#    every 2 seconds or so.  (See example immediately below)
+# 6. lines 248 and 257 and 266 final field should be "true" to use limelight
+#    for targeting. DONE.
+ 7. Drive: adjust and make gentler (ramp motors)
+# 8. Hooks: make faster and more powerful, and equal in speed to each other.
+#    . check if 0.7 is too low  (CHECKED: 0.7 is sufficient; but if the
+#      gear ratio is increased to make the robot sink more slowly when
+#      power is off, this could be increased to 1.0 to lessen the slowdown.)
+#    . check if 0.10 gentle push up is helpful  (NOT NEEDED.)
+ 9. Test and adjust autonomous maneuver sequences.
+ 10. Lines 1653 and 2010: Fix and tune the turn amount for tracking cargo
+     (these multipliers were set to 1.0/50.0, but we tried changing one to
+      1.0/100.0 to make the turns a little less aggressive, but did not have
+      time to test enough to know if that was an improvement or not.
+      We need more testing to determine the best value of both of those 
+      numbers.
+ 11. Test and adjust all driving parameters, including how sensitive the
+     joystick is, how aggressive the turns are, and how sensitive the
+     throttle is -- including whether any or all of those controls should be
+     linear or not.  The robot should be easy and fun to drive, so the
+     drivers can concentrate on game strategy rather than the controls.
+ 12. If we have time, it would be nice to test the gyro, to see how
+     accurate it is, if there is much delay, if it sometimes sends a
+     wildly-inaccurate value, whether a jolt to the robot can throw it off,
+     how much it drifts over time, and if it can sometime pop to a new
+     yaw value.  A lot of the code is depending on those values.
 #endif
 
