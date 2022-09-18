@@ -1222,16 +1222,18 @@ class Robot : public frc::TimedRobot {
                           // multiply that number by both axes to scale them.
       dThrottle = ( 1.0-sCurrState.joyZ ) / 2.0;
       
-                    // square it so its more sensitive at low throttle settings
+                   // square it so it's more sensitive at low throttle settings
       dThrottle = dThrottle * dThrottle;
       dThrottle = std::max( 0.01, dThrottle );
       dThrottle = std::min( 1.0,  dThrottle );
       desiredForward = desiredForward * dThrottle;
-      desiredTurn    = ( desiredTurn    * dThrottle ) * 0.9;
-      // if ( 19 == iCallCount%200 ) {
-         // cout << "Throttle/forward/turn " << dThrottle << "/"
-         //      << desiredForward << "/" << desiredTurn << endl;
-      // }
+                    // If NOT driving toward a cargo video target
+                    // (the DriveToCargo() function calculates desiredTurn
+                    //  completely, and doesn't want it modified by dThrottle).
+      if ( !( ( BUTTON_TARGET ) && ( !BUTTON_REVERSE ) &&
+              ( cargoOnVideo.SeenByCamera )               ) ) { 
+         desiredTurn    = ( desiredTurn    * dThrottle ) * 0.9;
+      } 
 #ifdef SAFETY_LIMITS
                            // for safety: allow limited range only -0.5 to 0.5
       desiredForward = std::min(  0.5, desiredForward );
@@ -1289,12 +1291,11 @@ class Robot : public frc::TimedRobot {
       LSMotorState.targetVelocityRPM = LSMasterOutput * DriveMaxRPM; 
       RSMotorState.targetVelocityRPM = RSMasterOutput * DriveMaxRPM;
 #ifdef DISP_SMARTDASHBOARD
-                         // Display Drive Motor Speeds on the SmartDashboard.
-                         // NOTE: There are comments on ChiefDelphi that
-                         //       the REV encoders have an unavoidable
-                         //       measurement delay of ~110 milliseconds, and
-                         //       that delay affects internal velocity loops.
-                         //       We may have to adjust for that.
+           // Display Drive Motor Speeds on the SmartDashboard.
+           // NOTE: Comments on ChiefDelphi say the REV encoders have an
+           //       unavoidable measurement delay of ~110 milliseconds, and
+           //       that delay affects internal velocity loops.
+           //       We may have to adjust for that.
       frc::SmartDashboard::PutNumber( "LeftDrive Desired Speed",
                                       LSMasterOutput * DriveMaxRPM );
       frc::SmartDashboard::PutNumber( "LeftDrive Current Speed",
@@ -1309,7 +1310,6 @@ class Robot : public frc::TimedRobot {
                                       m_RSMasterEncoder.GetPosition() );
 #endif
    }      // Team4918Drive()
-
 
       /*---------------------------------------------------------------------*/
       /* DriveCartesianByJoystick()                                          */
@@ -1651,7 +1651,7 @@ class Robot : public frc::TimedRobot {
          dEventualYawPosition = sCurrState.yawPosnEstimate + ( 0.5 / 600.0 ) *
                                               sCurrState.yawRateEstimate *
                                               abs(sCurrState.yawRateEstimate);
-         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/100.0;
+         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/750.0;
          dDesiredTurn = std::max( -1.0, dDesiredTurn );
          dDesiredTurn = std::min(  1.0, dDesiredTurn );
 
