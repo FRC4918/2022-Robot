@@ -1509,7 +1509,7 @@ class Robot : public frc::TimedRobot {
       limenttable->PutNumber( "ledMode", 3 );                   // turn LEDs on
 
       if ( 1 == limev )  {                       // if limelight data is valid
-         double dDesiredYawInstant = 0.0;
+         // double dDesiredYawInstant = 0.0;
          double autoDriveSpeed;
              // limea is the area of the target seen by the limelight camera
              // and is in percent (between 0 and 100) of the whole screen area.
@@ -1547,8 +1547,8 @@ class Robot : public frc::TimedRobot {
                  // yawPosnEstimate is left-turn-positive, but
                  // limex is left-turn-negative -- so we subtract limex to get
                  // a left-turn-positive result.
-         dDesiredYawInstant = sCurrState.yawPosnEstimate - limex;
-         dDesiredYaw = ( 19 * dDesiredYaw + dDesiredYawInstant ) / 20.0;
+         dDesiredYaw = sCurrState.yawPosnEstimate - limex;
+         // dDesiredYaw = ( 19 * dDesiredYaw + dDesiredYawInstant ) / 20.0;
              // Now calculate how hard we want to turn (right-turn-positive).
              // Since we now account for yaw rate in deciding when to end the
              // turn, we can be a little more aggressive in starting the turn:
@@ -1751,14 +1751,10 @@ class Robot : public frc::TimedRobot {
       } else if ( BUTTON_TARGET && BUTTON_REVERSE &&
                   ( 1  == limev )                ) {
                                 // Then autonomously drive towards the target.
-         sCurrState.joyZ = 0.0; // Set throttle to 1/2 power; do we want this?
-                                // Can't we use normal joyZ paddle setting?
-                                // YES: we need it to keep limelight aiming
-                                // consistent; without this the robot cannot
-                                // aim at the limelight target very well,
-                                // when the forward speed is close to zero,
-                                // because the robot doesn't turn very well at
-                                // zero forward speed.
+           // We must set joyZ first, to keep limelight aiming consistent.
+           // Without this the robot cannot always aim at the limelight target
+           // very well, when the throttle is very low or very high.
+         sCurrState.joyZ = 0.0;                  // Set throttle to 1/2 power.
          DriveToLimelightTarget();
 
                // If the console button 12 (the leftmost missile switch) is on
@@ -1772,6 +1768,10 @@ class Robot : public frc::TimedRobot {
                              /* This function is only called in             */
                              /* teleop mode, so no need to insert data into */
                              /* the joyY and joyX variables.                */
+	     // Turn on Limelight LEDs if trying and failing to see the target
+         if ( BUTTON_TARGET && BUTTON_REVERSE && ( 1 == iCallCount%50 ) ) {
+            limenttable->PutNumber( "ledMode", 3 );            // turn LEDs on
+         }
       }
       return true;
    }      // RunDriveMotors()
@@ -1943,21 +1943,21 @@ class Robot : public frc::TimedRobot {
       if ( std::abs( dDistanceDriven ) < std::abs( desiredDistance ) ) {
          if ( 0.0 < desiredDistance ) {             // If we're driving forward
                                       // and still have more than 10 feet to go
-            if ( dDistanceDriven < desiredDistance -  5.0 ) {
-               dDesiredSpeed = 1.0;                            // go full speed
+            if ( dDistanceDriven < desiredDistance - 10.0 ) {
+               dDesiredSpeed = 0.5;                            // go full speed
             } else {
                    // Otherwise speed is proportional to distance still needed.
-               dDesiredSpeed = 0.2 +
-                                  ( desiredDistance - dDistanceDriven ) / 10.0;
+               dDesiredSpeed = 0.01 +
+                                  ( desiredDistance - dDistanceDriven ) / 40.0;
             }
          } else {                               // else we're driving backwards
                                       // and still have more than 10 feet to go
-            if ( desiredDistance +  5.0 < dDistanceDriven ) {
-               dDesiredSpeed = -1.0;               // go full speed (backwards)
+            if ( desiredDistance + 10.0 < dDistanceDriven ) {
+               dDesiredSpeed = -0.5;               // go full speed (backwards)
             } else {
                    // Otherwise speed is proportional to distance still needed.
-               dDesiredSpeed = -0.2 +
-                                  ( desiredDistance - dDistanceDriven ) / 10.0;
+               dDesiredSpeed = -0.01 +
+                                  ( desiredDistance - dDistanceDriven ) / 40.0;
             }
          }
                              // if we have been told to divert to cargo balls
@@ -2008,7 +2008,7 @@ class Robot : public frc::TimedRobot {
                                               abs(sCurrState.yawRateEstimate);
              // Since we now account for yaw rate in deciding when to end the
              // turn, we can be more aggressive in starting the turn:
-         dDesiredTurn = ( dEventualYawPosition - desiredYaw ) * 1.0/50.0;
+         dDesiredTurn = ( dEventualYawPosition - desiredYaw ) * 1.0/250.0;
          dDesiredTurn = std::max( -1.0, dDesiredTurn );
          dDesiredTurn = std::min(  1.0, dDesiredTurn );
          
@@ -3796,5 +3796,20 @@ Things to do:
      wildly-inaccurate value, whether a jolt to the robot can throw it off,
      how much it drifts over time, and if it can sometime pop to a new
      yaw value.  A lot of the code is depending on those values.
+ 13. Eliminate the 19/20 averaging of dDesiredYaw on line 1551, and directly
+     use the dDesiredYawinstant value in line 1555.  That averaging was put in
+     to overcome problems with the limelight seeing the target, because it
+     was returning limex values skittering left and right with every frame,
+     but the limelight is tuned well now and returns good values, and this
+     averaging code sometimes makes the limelight targeting try to jump
+     toward the previous yaw angle, before it gets averaged out (and that
+     averaging might take 20 calls, which is about a half-second: enough
+     for the robot to rotate until the real target is out of the field
+     of view of the limelight).
+ 14. Should the factor on line 1555 be 1.0/60.0 ?  (DriveToLimelightTarget() )
+     Should the factor on line 1654 be 1.0/750.0 ? (YES, tested:DriveToCargo() )
+     Should the factor on line 1826 be 1.0/25.0 ?  (TurnToHeading() )
+     Should the factor on line 2011 be 1.0/250.0 ?  (DriveToDistance() )
+     Should the factors after line 1947 be what they are? (DriveToDistance() )
 #endif
 
