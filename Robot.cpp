@@ -210,9 +210,9 @@ class Robot : public frc::TimedRobot {
       {  33,  M_DRIVE_STRAIGHT,    -0.3,       0.0,         false }, 
       {  34,  M_LIMELOCK,           0.0,       0.0,         false },
       {  35,  M_SHOOT,              0.0,       0.0,         true  },
-      {  36,  M_ROTATE,             0.0,    - 90.0,         false },
-      {  37,  M_DRIVE_STRAIGHT,     4.0,    - 90.0,         false },
-      {  38,  M_DRIVE_STRAIGHT,     4.0,    - 90.0,         true  },
+      {  36,  M_ROTATE,             0.0,    -100.0,         false },
+      {  37,  M_DRIVE_STRAIGHT,     4.0,    -100.0,         false },
+      {  38,  M_DRIVE_STRAIGHT,     4.0,    -100.0,         true  },
       {  39,  M_WAIT,              50.0,       0.0,         true  },
 
       {  40,  M_ROTATE,             0.0,     -45.0,         false },
@@ -325,15 +325,18 @@ class Robot : public frc::TimedRobot {
       // when in reverse mode).
 #define BUTTON_REVERSE              ( sCurrState.joyButton[2] )
 #define BUTTON_REVERSE_PREV         ( sPrevState.joyButton[2] )
+
       // joystick button 3 (the topmost center button on back of joystick)
 #define BUTTON_JOYTHREE             ( sCurrState.joyButton[3] )
 #define BUTTON_JOYTHREE_PREV        ( sPrevState.joyButton[3] )
-      // joystick button 4 (the leftmost button on back of joystick)
-#define BUTTON_JOYFOUR              ( sCurrState.joyButton[4] )
-#define BUTTON_JOYFOUR_PREV         ( sPrevState.joyButton[4] )
-      // joystick button 5 (the rightmost button on back of joystick)
-#define BUTTON_JOYFIVE              ( sCurrState.joyButton[5] )
-#define BUTTON_JOYFIVE_PREV         ( sPrevState.joyButton[5] )
+
+      // joystick button 4 is the leftmost button on back of joystick
+#define BUTTON_CARTESIANDRIVE       ( sCurrState.joyButton[4] )
+#define BUTTON_CARTESIANDRIVE_PREV  ( sPrevState.joyButton[4] )
+
+      // joystick button 5 is the rightmost button on back of joystick
+#define BUTTON_GYRORESET            ( sCurrState.joyButton[5] )
+#define BUTTON_GYRORESET_PREV       ( sPrevState.joyButton[5] )
 
       // Console button  1 (the left-top pushbutton switch on the console)
       // runs the climber up.
@@ -368,10 +371,7 @@ class Robot : public frc::TimedRobot {
       // turns on the intake motor
 #define BUTTON_RUNINTAKE              ( sCurrState.conButton[7] )
 #define BUTTON_RUNINTAKE_PREV         ( sPrevState.conButton[7] )
-      // Console button 12 (the leftmost missile switch)
-      // turns on cartesian (field-oriented) drive.
-//#define BUTTON_CARTESIANDRIVE       ( sCurrState.conButton[12] )
-//#define BUTTON_CARTESIANDRIVE_PREV  ( sPrevState.conButton[12] )
+      // Console button 12 is the leftmost missile switch.
 #define BUTTON_SWITCH1 ( sCurrState.conButton[12] )
 #define BUTTON_SWITCH2 ( sCurrState.conButton[9]  )
 #define BUTTON_SWITCH3 ( sCurrState.conButton[10] )
@@ -439,11 +439,11 @@ class Robot : public frc::TimedRobot {
    rev::SparkMaxLimitSwitch m_RSMasterReverseLimitSwitch =
                    m_motorRSMaster.GetReverseLimitSwitch(
                             rev::SparkMaxLimitSwitch::Type::kNormallyClosed );
-   double DrivePIDkP = 0.0000;    // REV example had: 6e-5;
+   double DrivePIDkP = 0.0001;    // REV example had: 6e-5;  .001 is too big
    double DrivePIDkI = 0.0;       // REV example had: 1e-6;
    double DrivePIDkD = 0.0;
    double DrivePIDkIz = 0.0;
-   double DrivePIDkFF = 0.0017;  // REV example had: 0.000015;
+   double DrivePIDkFF = 0.00020;  // REV example had: 0.000015; 0.00020 is good
    double DrivePIDkMaxOutput =  1.0;
    double DrivePIDkMinOutput = -1.0;
    rev::SparkMaxLimitSwitch m_LSClimberForwardLimitSwitch =
@@ -987,7 +987,7 @@ class Robot : public frc::TimedRobot {
       if ( ( -0.045 < adjustedJoyY ) && ( adjustedJoyY < 0.025 ) ) {
          adjustedJoyY = 0.0;
       } else {
-         if ( false ) {     // formerly BUTTON_CARTESIANDRIVE
+         if ( BUTTON_CARTESIANDRIVE ) {     // formerly BUTTON_CARTESIANDRIVE
             adjustedJoyY = -sCurrState.joyY;               // just invert joyY
          } else {                  // else in normal robot-oriented drive mode
             if ( BUTTON_REVERSE ) {          // if "reverse" button is pressed
@@ -1002,7 +1002,7 @@ class Robot : public frc::TimedRobot {
       if ( ( -0.105 < adjustedJoyX ) && ( adjustedJoyX < 0.025 ) ) {
          adjustedJoyX = 0.0;
       } else {
-         if ( true ) { // formerly !BUTTON_CARTESIANDRIVE
+         if ( !BUTTON_CARTESIANDRIVE ) { // formerly !BUTTON_CARTESIANDRIVE
             adjustedJoyX = sCurrState.joyX*abs(sCurrState.joyX);
          }
       }
@@ -1017,7 +1017,7 @@ class Robot : public frc::TimedRobot {
           // more accurate driver control.  It increases fine control
           // at low speeds, but still permits full power when the
           // joystick is thrown all the way to its limit.
-      if ( true ) { // formerly !BUTTON_CARTESIANDRIVE
+      if ( !BUTTON_CARTESIANDRIVE ) { // formerly !BUTTON_CARTESIANDRIVE
          adjustedJoyY = std::copysign( adjustedJoyY * adjustedJoyY,
                                        adjustedJoyY );
          adjustedJoyX = std::copysign( adjustedJoyX * adjustedJoyX,
@@ -1082,8 +1082,8 @@ class Robot : public frc::TimedRobot {
       /* Display all the joystick values on the console log.                 */
       /*---------------------------------------------------------------------*/
    void JoystickDisplay( void ) {
-      cout << "joy (y/x): " << setw(8) << sCurrState.joyY << "/" <<
-                 setw(8) << sCurrState.joyX << endl;
+      cout << "joy (y/x/z): " << setw(8) << sCurrState.joyY << "/" <<
+                 setw(8) << sCurrState.joyX << "/" << sCurrState.joyZ << endl;
    }
 
 
@@ -1224,7 +1224,7 @@ class Robot : public frc::TimedRobot {
       
                    // square it so it's more sensitive at low throttle settings
       dThrottle = dThrottle * dThrottle;
-      dThrottle = std::max( 0.01, dThrottle );
+      dThrottle = std::max( 0.01, dThrottle ); // 0.0 to 0.02 could be set 0.0
       dThrottle = std::min( 1.0,  dThrottle );
       desiredForward = desiredForward * dThrottle;
                     // If NOT driving toward a cargo video target
@@ -1383,7 +1383,7 @@ class Robot : public frc::TimedRobot {
                        // of the desired heading
          if ( abs( desiredHeading - sCurrState.yawPosnEstimate ) < 20.0 ) {
             DriveToDistance( desiredHeading,       // heading in degrees
-                             desiredSpeed * 4.0,   // distance in feet,
+                             desiredSpeed * 40.0,  // distance in feet,
                              false,         // whether to divert to cargo ball
                              true  );       // whether to initialize distance
          } else {
@@ -1415,7 +1415,7 @@ class Robot : public frc::TimedRobot {
               //    positive joyX is toward the right
               //                                (the 270-degree direction) ).
 
-      if ( false ) { //formerly BUTTON_CARTESIANDRIVE
+      if ( BUTTON_CARTESIANDRIVE ) { // formerly BUTTON_CARTESIANDRIVE
          DriveCartesianByJoystick();
       } else {
          desiredForward = sCurrState.joyY;
@@ -1552,7 +1552,7 @@ class Robot : public frc::TimedRobot {
              // Now calculate how hard we want to turn (right-turn-positive).
              // Since we now account for yaw rate in deciding when to end the
              // turn, we can be a little more aggressive in starting the turn:
-         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/60.0;
+         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/20.0;
          dDesiredTurn = std::max( -1.0, dDesiredTurn );
          dDesiredTurn = std::min(  1.0, dDesiredTurn );
          if ( 0 == iCallCount%100 )  {
@@ -1651,7 +1651,7 @@ class Robot : public frc::TimedRobot {
          dEventualYawPosition = sCurrState.yawPosnEstimate + ( 0.5 / 600.0 ) *
                                               sCurrState.yawRateEstimate *
                                               abs(sCurrState.yawRateEstimate);
-         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/750.0;
+         dDesiredTurn = ( dEventualYawPosition - dDesiredYaw ) * 1.0/75.0;
          dDesiredTurn = std::max( -1.0, dDesiredTurn );
          dDesiredTurn = std::min(  1.0, dDesiredTurn );
 
@@ -1758,7 +1758,7 @@ class Robot : public frc::TimedRobot {
          DriveToLimelightTarget();
 
                // If the console button 12 (the leftmost missile switch) is on
-      } else if ( false ) { //formerly BUTTON_CARTESIANDRIVE
+      } else if ( BUTTON_CARTESIANDRIVE ) { // formerly BUTTON_CARTESIANDRIVE
                        // Then drive by cartesian coordinates (field oriented)
          DriveCartesianByJoystick();
 
@@ -1947,8 +1947,8 @@ class Robot : public frc::TimedRobot {
                dDesiredSpeed = 0.5;                            // go full speed
             } else {
                    // Otherwise speed is proportional to distance still needed.
-               dDesiredSpeed = 0.01 +
-                                  ( desiredDistance - dDistanceDriven ) / 40.0;
+               dDesiredSpeed = 0.1 +
+                                  ( desiredDistance - dDistanceDriven ) / 10.0;
             }
          } else {                               // else we're driving backwards
                                       // and still have more than 10 feet to go
@@ -1956,8 +1956,8 @@ class Robot : public frc::TimedRobot {
                dDesiredSpeed = -0.5;               // go full speed (backwards)
             } else {
                    // Otherwise speed is proportional to distance still needed.
-               dDesiredSpeed = -0.01 +
-                                  ( desiredDistance - dDistanceDriven ) / 40.0;
+               dDesiredSpeed = -0.1 +
+                                  ( desiredDistance - dDistanceDriven ) / 10.0;
             }
          }
                              // if we have been told to divert to cargo balls
@@ -2008,7 +2008,7 @@ class Robot : public frc::TimedRobot {
                                               abs(sCurrState.yawRateEstimate);
              // Since we now account for yaw rate in deciding when to end the
              // turn, we can be more aggressive in starting the turn:
-         dDesiredTurn = ( dEventualYawPosition - desiredYaw ) * 1.0/250.0;
+         dDesiredTurn = ( dEventualYawPosition - desiredYaw ) * 1.0/50.0;
          dDesiredTurn = std::max( -1.0, dDesiredTurn );
          dDesiredTurn = std::min(  1.0, dDesiredTurn );
          
@@ -3664,14 +3664,6 @@ class Robot : public frc::TimedRobot {
       autoConveyor = false;
       m_compressor.EnableDigital();
                                                     // zero the drive encoders
-  //  m_motorLSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-  //  m_motorRSMaster.SetSelectedSensorPosition( 0, 0, 10 );
-  //  m_motorLSMaster.SetIntegralAccumulator( 0.0 );
-  //  m_motorRSMaster.SetIntegralAccumulator( 0.0 );
-  //  m_motorLSMaster.ConfigClosedloopRamp(0.0);
-  //  m_motorRSMaster.ConfigClosedloopRamp(0.0);
-  //  m_motorLSMaster.ConfigOpenloopRamp(  0.0);
-  //  m_motorRSMaster.ConfigOpenloopRamp(  0.0);
   //  LSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
   //  RSMotorState.targetVelocity_UnitsPer100ms = 0.0 * 4096 / 600;
       sCurrState.teleop = true;
@@ -3680,6 +3672,14 @@ class Robot : public frc::TimedRobot {
       Team4918Drive( 0.0, 0.0 );          // make sure drive motors are stopped
    }      // TeleopInit()
 
+
+   void ResetGyro( void ) {
+      if ( BUTTON_GYRORESET && !BUTTON_GYRORESET_PREV ) {
+	      // reset so the direction the robot it pointed now is the new 0.0
+         sCurrState.yawPosnEstimate = 0.0;
+         gyro.Reset();    // Calibrate Gyro on powerup, but never afterward
+      }
+   }
 
       /*---------------------------------------------------------------------*/
       /* TeleopPeriodic()                                                    */
@@ -3738,7 +3738,7 @@ class Robot : public frc::TimedRobot {
       LEDCompetition();   // Alliance color at front, green limelight color at
                           // back, advancing orange LEDS separated by unlit
                           // LEDs everywhere else.
-
+      ResetGyro();
       iCallCount++;
    }      // TeleopPeriodic()
  
@@ -3773,7 +3773,7 @@ Things to do:
 #    every 2 seconds or so.  (See example immediately below)
 # 6. lines 248 and 257 and 266 final field should be "true" to use limelight
 #    for targeting. DONE.
- 7. Drive: adjust and make gentler (ramp motors)
+# 7. Drive: adjust and make gentler (ramp motors)
 # 8. Hooks: make faster and more powerful, and equal in speed to each other.
 #    . check if 0.7 is too low  (CHECKED: 0.7 is sufficient; but if the
 #      gear ratio is increased to make the robot sink more slowly when
@@ -3806,10 +3806,10 @@ Things to do:
      averaging might take 20 calls, which is about a half-second: enough
      for the robot to rotate until the real target is out of the field
      of view of the limelight).
- 14. Should the factor on line 1555 be 1.0/60.0 ?  (DriveToLimelightTarget() )
-     Should the factor on line 1654 be 1.0/750.0 ? (YES, tested:DriveToCargo() )
+ 14. Should the factor on line 1555 be 1.0/20.0? (YES, DriveToLimelightTarget())
+     Should the factor on line 1654 be 1.0/75.0 ?  (YES, tested:DriveToCargo() )
      Should the factor on line 1826 be 1.0/25.0 ?  (TurnToHeading() )
-     Should the factor on line 2011 be 1.0/250.0 ?  (DriveToDistance() )
+     Should the factor on line 2011 be 1.0/50.0 ?  (DriveToDistance() )
      Should the factors after line 1947 be what they are? (DriveToDistance() )
 #endif
 
