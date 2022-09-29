@@ -1947,7 +1947,7 @@ class Robot : public frc::TimedRobot {
                dDesiredSpeed = 0.5;                            // go full speed
             } else {
                    // Otherwise speed is proportional to distance still needed.
-               dDesiredSpeed = 0.1 +
+               dDesiredSpeed = 0.2 +
                                   ( desiredDistance - dDistanceDriven ) / 10.0;
             }
          } else {                               // else we're driving backwards
@@ -1956,7 +1956,7 @@ class Robot : public frc::TimedRobot {
                dDesiredSpeed = -0.5;               // go full speed (backwards)
             } else {
                    // Otherwise speed is proportional to distance still needed.
-               dDesiredSpeed = -0.1 +
+               dDesiredSpeed = -0.2 +
                                   ( desiredDistance - dDistanceDriven ) / 10.0;
             }
          }
